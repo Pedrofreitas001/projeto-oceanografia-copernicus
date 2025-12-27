@@ -210,26 +210,19 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     const map = mapInstance.current;
     const sstLayers = (map as any)._sstLayers;
 
-    if (sstLayers) {
+    if (sstLayers && sstLayers.zones) {
       if (showSSTOverlay) {
-        // Adicionar camada customizada
-        if (!map.hasLayer(sstLayers.custom)) {
-          sstLayers.custom.addTo(map);
-          console.log('🌡️ SST gradient overlay enabled');
-        }
-        // Tentar adicionar RainViewer
-        if (!map.hasLayer(sstLayers.rainviewer)) {
-          sstLayers.rainviewer.addTo(map);
+        // Adicionar camada de zonas de temperatura
+        if (!map.hasLayer(sstLayers.zones)) {
+          sstLayers.zones.addTo(map);
+          console.log('🌡️ SST temperature zones overlay enabled');
         }
       } else {
-        // Remover todas as camadas SST
-        if (map.hasLayer(sstLayers.custom)) {
-          map.removeLayer(sstLayers.custom);
+        // Remover camada de zonas de temperatura
+        if (map.hasLayer(sstLayers.zones)) {
+          map.removeLayer(sstLayers.zones);
+          console.log('🌡️ SST temperature zones overlay disabled');
         }
-        if (map.hasLayer(sstLayers.rainviewer)) {
-          map.removeLayer(sstLayers.rainviewer);
-        }
-        console.log('🌡️ SST overlay disabled');
       }
     }
   }, [showSSTOverlay]);
