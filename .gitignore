@@ -7,10 +7,21 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
+.vercel
+.output
+
+# Environment variables
 *.local
+.env
+.env.local
+.env.production
+.env.development
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +33,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Vercel
+.vercel

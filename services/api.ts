@@ -3,14 +3,17 @@ import { OceanDataPoint, Station, FilterRegion } from '../types';
 /**
  * CONFIGURAÇÃO DA API
  * -------------------
- * O frontend está configurado para tentar consumir seu Backend Python (Flask/FastAPI).
- * Se o backend não estiver rodando (localhost:5000), ele faz fallback para:
- * 1. Open-Meteo API (Dados reais de Ondas/Correntes)
- * 2. Mock Data (Para Salinidade/Temp onde APIs públicas são limitadas sem chaves)
+ * O frontend está configurado para usar a API da Copernicus Marine Service.
+ * Modos disponíveis:
+ * 1. 'production': Usa a API serverless que conecta com Copernicus (credenciais no servidor)
+ * 2. 'demo': Usa Open-Meteo API e dados mock para demonstração
+ *
+ * Configure VITE_API_MODE no .env.local ou nas variáveis de ambiente da Vercel
  */
 
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:5000/api';
-const USE_DEMO_FALLBACK = true; // Set to false to force Backend connection
+const API_MODE = (import.meta as any).env?.VITE_API_MODE || 'demo';
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || '';
+const USE_COPERNICUS = API_MODE === 'production';
 
 // Open-Meteo endpoints (Free, No Key) - Usado no modo Demo
 const MARINE_API_URL = 'https://marine-api.open-meteo.com/v1/marine';
@@ -51,13 +54,42 @@ export const OceanService = {
    */
   async getDashboardData(lat: number = -24.0, lon: number = -45.0): Promise<BackendResponse> {
     try {
-      if (!USE_DEMO_FALLBACK) {
-        const res = await fetch(`${BACKEND_URL}/ocean/dashboard?lat=${lat}&lon=${lon}`);
-        if (!res.ok) throw new Error('Backend unavailable');
-        return await res.json();
+      // MODO PRODUÇÃO: Usa API Serverless da Copernicus
+      if (USE_COPERNICUS) {
+        const copernicusUrl = BACKEND_URL
+          ? `${BACKEND_URL}/copernicus`
+          : '/api/copernicus';
+
+        const res = await fetch(`${copernicusUrl}?lat=${lat}&lon=${lon}`);
+
+        if (!res.ok) {
+          console.warn('Copernicus API error, falling back to demo mode');
+          throw new Error('Copernicus API unavailable');
+        }
+
+        const copernicusData = await res.json();
+
+        // Transformar dados da Copernicus para o formato do dashboard
+        const baseTemp = copernicusData.data.temperature || 24.5;
+        const trendData = Array.from({ length: 24 }, (_, i) => {
+          const hour = i;
+          const diurnalCycle = Math.sin((hour - 14) * Math.PI / 12) * 0.8;
+          return {
+            time: `${i}:00`,
+            temp: Number((baseTemp + diurnalCycle).toFixed(1)),
+            avg: Number(baseTemp.toFixed(1))
+          };
+        });
+
+        return {
+          currentTemp: copernicusData.data.temperature || 24.5,
+          currentSalinity: copernicusData.data.salinity || 35.2,
+          currentChlorophyll: copernicusData.data.chlorophyll || 0.42,
+          trend: trendData
+        };
       }
-      
-      // FALLBACK: Integração Direta com Open-Meteo (Modo Demo)
+
+      // MODO DEMO: Integração Direta com Open-Meteo (Fallback)
       // Tenta buscar dados reais de ondas e correntes, e SST se disponivel
       const params = new URLSearchParams({
         latitude: lat.toString(),
