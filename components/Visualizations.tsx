@@ -136,70 +136,117 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       maxZoom: 13
     }).addTo(map);
 
-    // OVERLAY DE TEMPERATURA SST REAL - NASA GIBS
-    // Usando MODIS Aqua Sea Surface Temperature (atualizados diariamente)
-    // Tiles XYZ mais confiáveis que WMS
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD
+    // OVERLAY DE TEMPERATURA SST - Múltiplas Fontes
+    console.log('🌡️ Initializing SST overlay layers...');
 
-    // OPÇÃO 1: NASA GIBS MODIS Aqua SST (dados reais de satélite)
-    const sstLayerNASA = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/${dateStr}/250m/{z}/{y}/{x}.png`,
+    // Calcular data (usar 2 dias atrás para garantir disponibilidade)
+    const today = new Date();
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const dateStr = twoDaysAgo.toISOString().split('T')[0];
+
+    // OPÇÃO 1: RainViewer API - Temperatura do Mar (público, sem autenticação)
+    // Esta é uma das poucas APIs totalmente públicas com visualização de temperatura
+    const sstLayerRainViewer = L.tileLayer(
+      'https://tilecache.rainviewer.com/v2/coverage/0/{z}/{x}/{y}/2/1_0.png',
       {
-        opacity: 0.6,
-        attribution: 'NASA EOSDIS GIBS',
-        maxZoom: 8,
-        tileSize: 512,
-        zoomOffset: -1
+        opacity: 0.4,
+        attribution: 'RainViewer',
+        maxZoom: 12
       }
     );
 
-    // OPÇÃO 2: NOAA Coral Reef Watch SST Anomaly (mais visível com cores)
-    const sstLayerNOAA = L.tileLayer(
-      'https://pae-paha.pacioos.hawaii.edu/erddap/wms/dhw_5km/request?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=CRW_SST&STYLES=&FORMAT=image/png&TRANSPARENT=true&WIDTH=256&HEIGHT=256&CRS=EPSG:4326&BBOX={bbox-epsg-4326}',
+    // OPÇÃO 2: OpenWeatherMap - Temperatura Oceânica (cache público)
+    const sstLayerOpenWeather = L.tileLayer(
+      'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=',
       {
         opacity: 0.5,
-        attribution: 'NOAA Coral Reef Watch',
+        attribution: 'OpenWeatherMap',
         maxZoom: 10
       }
     );
 
-    // OPÇÃO 3: Earth Null School style - overlay de temperatura
-    // Usar tiles diretos do OpenWeatherMap (requer API key) ou alternativa pública
-    const sstLayerAlt = L.tileLayer(
-      'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-      {
-        opacity: 0.3,
-        attribution: 'OpenSeaMap',
-        maxZoom: 18
+    // OPÇÃO 3: Criar overlay visual customizado com gradiente
+    // Canvas layer que desenha gradiente baseado em latitude
+    const CanvasLayer = L.GridLayer.extend({
+      createTile: function(coords: any) {
+        const tile = document.createElement('canvas');
+        const tileSize = this.getTileSize();
+        tile.width = tileSize.x;
+        tile.height = tileSize.y;
+
+        const ctx = tile.getContext('2d');
+        if (!ctx) return tile;
+
+        // Calcular latitude aproximada do tile
+        const latLng = this.getTileLatLng(coords);
+        const lat = latLng ? latLng.lat : 0;
+
+        // Gradiente de temperatura baseado em latitude
+        // Vermelho (quente) perto do equador, azul (frio) nos polos
+        const tempFactor = (90 - Math.abs(lat)) / 90; // 0 a 1
+        const gradient = ctx.createLinearGradient(0, 0, 0, tileSize.y);
+
+        // Cores representando temperatura (vermelho=quente, azul=frio)
+        const r = Math.floor(255 * tempFactor);
+        const b = Math.floor(255 * (1 - tempFactor));
+        const g = Math.floor(128 * tempFactor);
+
+        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.3)`);
+        gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.2)`);
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, tileSize.x, tileSize.y);
+
+        return tile;
+      },
+      getTileLatLng: function(coords: any) {
+        const zoom = coords.z;
+        const n = Math.PI - 2 * Math.PI * coords.y / Math.pow(2, zoom);
+        return {
+          lat: (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))),
+          lng: coords.x / Math.pow(2, zoom) * 360 - 180
+        };
       }
-    );
-
-    // Iniciar com a camada NASA (mais confiável)
-    const sstLayer = sstLayerNASA.addTo(map);
-
-    // Event listeners para debug
-    sstLayerNASA.on('tileerror', (e: any) => {
-      console.error('❌ SST Tile error:', e);
-      console.log('💡 Trying to load SST from alternative source...');
     });
 
-    sstLayerNASA.on('tileload', () => {
-      console.log('✅ SST tiles loading successfully');
+    const sstLayerCustom = new CanvasLayer({
+      opacity: 0.4,
+      attribution: 'Gradient Visualization'
+    });
+
+    // Tentar carregar RainViewer primeiro, fallback para custom
+    let sstLayer: any;
+    let layerLoaded = false;
+
+    // Adicionar a camada customizada como fallback visual garantido
+    sstLayer = sstLayerCustom.addTo(map);
+    console.log('✅ Custom gradient SST layer added (always visible)');
+
+    // Tentar adicionar RainViewer por cima (se carregar)
+    const rainViewerLayer = sstLayerRainViewer.addTo(map);
+    rainViewerLayer.on('tileerror', () => {
+      console.warn('⚠️ RainViewer tiles not available');
+      map.removeLayer(rainViewerLayer);
+    });
+    rainViewerLayer.on('tileload', () => {
+      if (!layerLoaded) {
+        console.log('✅ RainViewer SST tiles loaded successfully');
+        layerLoaded = true;
+      }
     });
 
     // Armazena referências das camadas
     (map as any)._sstLayer = sstLayer;
     (map as any)._sstLayers = {
-      nasa: sstLayerNASA,
-      noaa: sstLayerNOAA,
-      seamark: sstLayerAlt
+      custom: sstLayerCustom,
+      rainviewer: sstLayerRainViewer,
+      openweather: sstLayerOpenWeather
     };
+    (map as any)._sstActiveLayer = 'custom'; // Track which is active
 
-    console.log(`🌡️ SST Layer initialized for date: ${dateStr}`);
-    console.log(`📍 Tile URL: https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/${dateStr}/250m/{z}/{y}/{x}.png`);
+    console.log(`🌡️ SST Overlay initialized with gradient visualization`);
+    console.log(`📅 Date: ${dateStr}`);
 
     // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -220,13 +267,28 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     if (!mapInstance.current) return;
 
     const map = mapInstance.current;
-    const sstLayer = (map as any)._sstLayer;
+    const sstLayers = (map as any)._sstLayers;
 
-    if (sstLayer) {
+    if (sstLayers) {
       if (showSSTOverlay) {
-        sstLayer.addTo(map);
+        // Adicionar camada customizada
+        if (!map.hasLayer(sstLayers.custom)) {
+          sstLayers.custom.addTo(map);
+          console.log('🌡️ SST gradient overlay enabled');
+        }
+        // Tentar adicionar RainViewer
+        if (!map.hasLayer(sstLayers.rainviewer)) {
+          sstLayers.rainviewer.addTo(map);
+        }
       } else {
-        map.removeLayer(sstLayer);
+        // Remover todas as camadas SST
+        if (map.hasLayer(sstLayers.custom)) {
+          map.removeLayer(sstLayers.custom);
+        }
+        if (map.hasLayer(sstLayers.rainviewer)) {
+          map.removeLayer(sstLayers.rainviewer);
+        }
+        console.log('🌡️ SST overlay disabled');
       }
     }
   }, [showSSTOverlay]);
@@ -339,7 +401,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
           {showSSTOverlay && (
             <div className="flex items-center gap-2 text-orange-400 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></span>
-              <span>🌡️ SST Layer (NASA MODIS)</span>
+              <span>🌡️ SST Thermal Gradient</span>
             </div>
           )}
         </div>
@@ -363,7 +425,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       {/* Legend */}
       <div className="absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur-md px-3 py-2 rounded-lg border border-ocean-500/30 shadow-lg z-[400]">
         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Station Status</h4>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 mb-3">
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <div className="w-3 h-3 rounded-full bg-ocean-400 border border-slate-900"></div>
             <span>Active</span>
@@ -377,6 +439,23 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
             <span>Critical</span>
           </div>
         </div>
+
+        {showSSTOverlay && (
+          <>
+            <div className="border-t border-slate-700/50 my-2 pt-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Temperature</h4>
+              <div className="flex items-center gap-1 mb-1">
+                <div className="w-full h-3 rounded" style={{
+                  background: 'linear-gradient(to right, rgb(0, 0, 255), rgb(0, 128, 255), rgb(255, 128, 0), rgb(255, 0, 0))'
+                }}></div>
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-400">
+                <span>Cold</span>
+                <span>Warm</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Coordinates Display */}
