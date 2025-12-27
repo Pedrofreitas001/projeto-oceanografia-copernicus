@@ -95,9 +95,15 @@ export const SalinityChart: React.FC = () => {
 interface OceanMapProps {
   selectedStation: Station | null;
   stations?: Station[];
+  metrics?: {
+    temp: number;
+    salinity: number;
+    chlorophyll: number;
+    velocity: number;
+  };
 }
 
-export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = [] }) => {
+export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = [], metrics }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
@@ -173,23 +179,31 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
       const marker = L.marker([station.latitude, station.longitude], { icon });
 
-      // Generate mock sensor data for popup
-      const latitudeFactor = Math.abs(station.latitude) * 0.15;
-      const baseTemp = 27 - latitudeFactor;
-      const temp = (baseTemp + (Math.random() * 2 - 1)).toFixed(1);
-      const salinity = (35 + (Math.random() * 1 - 0.5)).toFixed(1);
-      const chl = (0.3 + Math.random() * 0.3).toFixed(2);
+      // Use real API data if this is the selected station and metrics are available
+      // Otherwise show "Select station" message
+      const useRealData = isSelected && metrics;
+      const temp = useRealData ? metrics.temp.toFixed(1) : 'N/A';
+      const salinity = useRealData ? metrics.salinity.toFixed(1) : 'N/A';
+      const chl = useRealData ? metrics.chlorophyll.toFixed(2) : 'N/A';
+      const velocity = useRealData ? metrics.velocity.toFixed(2) : 'N/A';
 
       marker.bindPopup(`
         <div class="font-sans min-w-[180px]">
           <h3 class="font-bold text-slate-100 text-sm mb-1">${station.name}</h3>
           <p class="text-xs text-slate-400 mb-2">ID: ${station.id}</p>
-          <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-300">
-            <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${temp}°C</span>
-            <span>Salinity:</span> <span>${salinity} PSU</span>
-            <span>Chl-a:</span> <span class="text-teal-400">${chl} mg/m³</span>
-            <span>Status:</span> <span class="${station.status === 'active' ? 'text-green-400' : 'text-yellow-400'}">${station.status}</span>
-          </div>
+          ${useRealData ? `
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-300">
+              <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${temp}°C</span>
+              <span>Salinity:</span> <span class="text-emerald-400">${salinity} PSU</span>
+              <span>Chl-a:</span> <span class="text-teal-400">${chl} mg/m³</span>
+              <span>Velocity:</span> <span class="text-blue-400">${velocity} m/s</span>
+              <span>Status:</span> <span class="${station.status === 'active' ? 'text-green-400' : 'text-yellow-400'}">${station.status}</span>
+            </div>
+          ` : `
+            <div class="text-xs text-slate-400 py-2">
+              <p>Click on a station in the sidebar to view real-time data from Copernicus API</p>
+            </div>
+          `}
         </div>
       `);
 

@@ -240,7 +240,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map Section - Takes up 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          <OceanMap selectedStation={selectedStation} stations={stations} />
+          <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
