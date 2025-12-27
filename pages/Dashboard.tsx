@@ -64,17 +64,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
           OceanService.getAnomalies(stationId)
         ]);
 
-        // Calculate current velocity based on station location
-        // Deeper waters (further from coast) = higher currents
-        const distanceFromCoast = Math.abs(lon) / 50; // Simplified calculation
-        const currentVelocity = Number((0.2 + distanceFromCoast + (Math.random() * 0.3)).toFixed(2));
-
         const now = new Date();
+
+        // Todos os dados vêm da MESMA fonte (Copernicus ou Open-Meteo)
         const newMetrics = {
           temp: dashboardData.currentTemp,
           salinity: dashboardData.currentSalinity,
           chlorophyll: dashboardData.currentChlorophyll,
-          velocity: currentVelocity
+          velocity: dashboardData.currentVelocity // Agora vem da API, não calculado!
         };
 
         setMetrics(newMetrics);
@@ -99,10 +96,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
         });
 
         console.log(`📊 Loaded data for station: ${selectedStation?.name || 'All Stations'}`);
+        console.log(`  - API Mode: ${isProduction ? 'Production (Copernicus)' : 'Demo (Open-Meteo)'}`);
+        console.log(`  - Temperature: ${newMetrics.temp}°C`);
+        console.log(`  - Salinity: ${newMetrics.salinity} PSU`);
+        console.log(`  - Chlorophyll: ${newMetrics.chlorophyll} mg/m³`);
+        console.log(`  - Current Velocity: ${newMetrics.velocity} m/s`);
         console.log(`  - Measurements: ${recentMeasurements.length}`);
         console.log(`  - Anomalies: ${anomalies.length}`);
-        console.log(`  - Current Velocity: ${currentVelocity} m/s`);
-        console.log(`  - API Mode: ${isProduction ? 'Production (Copernicus)' : 'Demo (Open-Meteo)'}`);
       } catch (err) {
         console.error("Failed to load dashboard", err);
       } finally {

@@ -22,6 +22,7 @@ interface BackendResponse {
   currentTemp: number;
   currentSalinity: number;
   currentChlorophyll: number;
+  currentVelocity: number;
   trend: Array<{ time: string; temp: number; avg: number }>;
 }
 
@@ -98,6 +99,7 @@ export const OceanService = {
           currentTemp: copernicusData.data.temperature || 24.5,
           currentSalinity: copernicusData.data.salinity || 35.2,
           currentChlorophyll: copernicusData.data.chlorophyll || 0.42,
+          currentVelocity: copernicusData.data.velocity || 0.4,
           trend: trendData
         };
       }
@@ -155,10 +157,14 @@ export const OceanService = {
         ? trendData[currentTempIndex].temp
         : baseTemp;
 
+      // Current velocity da API Open-Meteo (dados reais)
+      const currentVelocity = data.current?.ocean_current_velocity || 0.4;
+
       return {
         currentTemp: Number(currentTemp.toFixed(1)),
         currentSalinity: Number((35.2 + (Math.random() * 0.2 - 0.1) + (lat < -30 ? -0.8 : 0)).toFixed(1)),
         currentChlorophyll: Number((Math.abs(lon) > 40 ? 0.45 + (Math.random() * 0.15) : 0.15).toFixed(2)),
+        currentVelocity: Number(currentVelocity.toFixed(2)),
         trend: trendData
       };
 
@@ -168,6 +174,7 @@ export const OceanService = {
         currentTemp: 24.5,
         currentSalinity: 35.2,
         currentChlorophyll: 0.42,
+        currentVelocity: 0.4,
         trend: Array.from({ length: 24 }, (_, i) => ({
           time: `${i}:00`,
           temp: 24,
