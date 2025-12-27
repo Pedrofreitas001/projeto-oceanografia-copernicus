@@ -138,69 +138,69 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
     // ============================================================================
     // OVERLAY DE TEMPERATURA SST - DADOS DINÂMICOS EM TEMPO REAL
-    // Usando WMTS da Copernicus Marine Service
-    // Produto: GLOBAL_ANALYSISFORECAST_PHY_001_024 (Sistema Global de Análise e Previsão)
+    // Usando WMS da NOAA CoastWatch ERDDAP
+    // Dataset: JPL MUR SST (Multi-scale Ultra-high Resolution)
     // ============================================================================
-    console.log('🌡️ Creating DYNAMIC SST overlay from Copernicus Marine WMTS...');
+    console.log('🌡️ Creating DYNAMIC SST overlay from NOAA CoastWatch WMS...');
 
-    // Data atual para pegar os dados mais recentes
+    // Data mais recente disponível (ontem para garantir disponibilidade)
     const today = new Date();
     const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1); // Usar ontem para garantir disponibilidade
-    const timeParam = yesterday.toISOString().split('T')[0] + 'T00:00:00.000Z';
+    yesterday.setDate(yesterday.getDate() - 1);
+    const timeParam = yesterday.toISOString().split('T')[0];
 
-    // PRODUTO OFICIAL RECOMENDADO: GLOBAL_ANALYSISFORECAST_PHY_001_024
-    // Dataset: cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m
-    // Variável: thetao (temperatura da água do mar)
-    // Resolução: 1/12° (~8 km) | Atualização: Diária | Previsão: 10 dias
-    // Níveis Verticais: 50 níveis (0-5500m) | Modelo: NEMO
-    const PRODUCT_ID = 'GLOBAL_ANALYSISFORECAST_PHY_001_024';
-    const DATASET_ID = 'cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m';
-    const VARIABLE_ID = 'thetao';
+    // NOAA CoastWatch ERDDAP - WMS Service
+    // Dataset: jplMURSST41 (JPL Multi-scale Ultra-high Resolution SST)
+    // Resolução: 0.01° (~1km) | Global | 2002-present | Atualização: Diária
+    // Fonte: GHRSST Level 4 MUR Global Foundation SST Analysis
+    const wmsBaseUrl = 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request';
 
-    const copernicusWMTS_Temperature = `https://wmts.marine.copernicus.eu/teroWmts?` +
-      `SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
-      `&LAYER=${PRODUCT_ID}/${DATASET_ID}/${VARIABLE_ID}` +
-      `&TILEMATRIXSET=EPSG:3857` +
-      `&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
-      `&FORMAT=image/png` +
-      `&TIME=${timeParam}` +
-      `&ELEVATION=-0.5` +  // Superfície do mar (0.5m de profundidade)
-      `&STYLE=cmap:turbo,range:0/32`;  // Turbo colormap para máxima visibilidade
-
-    // Criar camada WMTS dinâmica com ALTA OPACIDADE para gradiente bem visível
-    const sstDynamicLayer = L.tileLayer(copernicusWMTS_Temperature, {
-      opacity: 0.85,  // 85% visível para gradiente marcado
-      attribution: '© Copernicus Marine Service - GLOBAL_ANALYSISFORECAST_PHY_001_024',
-      maxZoom: 10,  // Limite baseado na resolução dos dados (~8km)
+    const sstDynamicLayer = L.tileLayer.wms(wmsBaseUrl, {
+      layers: 'jplMURSST41:analysed_sst',
+      format: 'image/png',
+      transparent: true,
+      version: '1.3.0',
+      crs: L.CRS.EPSG4326,
+      time: timeParam,
+      colorscalerange: '0,32',  // Range de temperatura otimizado
+      opacity: 0.7,  // 70% para boa visibilidade mantendo mapa base visível
+      attribution: '© NOAA CoastWatch - JPL MUR SST',
+      maxZoom: 12,
       minZoom: 2,
-      crossOrigin: true,
-      errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', // Transparent 1x1 pixel
-    });
+    } as any);
 
-    // Event listeners para debugging
+    // Event listeners para debugging e verificação
     sstDynamicLayer.on('tileerror', (e: any) => {
-      console.warn('⚠️ SST tile load error, trying NASA GIBS fallback...', e.coords);
-      // Não fazer nada, o errorTileUrl já cuida do fallback visual
+      console.error('❌ SST tile load error:', {
+        coords: e.coords,
+        url: e.tile?.src,
+        error: e.error
+      });
     });
 
+    let tilesLoaded = 0;
     sstDynamicLayer.on('tileload', (e: any) => {
-      console.log('✅ SST tile loaded successfully:', e.coords);
+      tilesLoaded++;
+      if (tilesLoaded <= 3) {
+        console.log(`✅ SST tile ${tilesLoaded} loaded successfully:`, e.coords);
+      }
     });
 
     // Adicionar ao mapa
     sstDynamicLayer.addTo(map);
-    console.log('✅ Dynamic SST WMTS overlay added (HIGH VISIBILITY)');
-    console.log(`📦 Product: ${PRODUCT_ID}`);
-    console.log(`🗂️ Dataset: ${DATASET_ID}`);
-    console.log(`🌡️ Variable: ${VARIABLE_ID} (Sea Water Temperature)`);
+    console.log('✅ Dynamic SST WMS overlay added (HIGH VISIBILITY)');
+    console.log(`📦 Service: NOAA CoastWatch ERDDAP WMS`);
+    console.log(`🗂️ Dataset: jplMURSST41 (JPL MUR SST)`);
+    console.log(`🌡️ Variable: analysed_sst (Sea Surface Temperature)`);
     console.log(`📅 Time: ${timeParam}`);
-    console.log(`📏 Depth: -0.5m (surface)`);
-    console.log(`🎨 Colormap: TURBO (vibrant blue→cyan→green→yellow→orange→red)`);
-    console.log(`📊 Range: 0°C to 32°C (optimized for tropical/temperate oceans)`);
-    console.log(`👁️ Opacity: 85% (high contrast)`);
-    console.log(`🗺️ Resolution: 1/12° (~8km)`);
-    console.log(`🔄 Update: Daily with 10-day forecast`);
+    console.log(`📏 Surface: 0m depth`);
+    console.log(`🎨 Colormap: Default thermal gradient`);
+    console.log(`📊 Range: 0°C to 32°C`);
+    console.log(`👁️ Opacity: 70%`);
+    console.log(`🗺️ Resolution: 0.01° (~1km) - Ultra-high resolution!`);
+    console.log(`🔄 Update: Daily`);
+    console.log(`🌐 Coverage: Global ocean`);
+    console.log(`📍 WMS URL: ${wmsBaseUrl}`);
 
     // Armazena referências das camadas
     (map as any)._sstLayer = sstDynamicLayer;
@@ -208,7 +208,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       dynamic: sstDynamicLayer
     };
 
-    console.log('🌊 Data Source: Copernicus Marine Service - NEMO Model (GLOBAL_ANALYSISFORECAST_PHY_001_024)');
+    console.log('🌊 Data Source: NOAA CoastWatch - GHRSST MUR SST Analysis');
 
     // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
