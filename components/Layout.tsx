@@ -153,16 +153,16 @@ export const KPICard: React.FC<{
   const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-ocean-500/30 transition-all duration-300 group">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-slate-400 text-sm font-medium">{label}</span>
-        <div className={`p-2 rounded-lg bg-slate-700/50 ${color} group-hover:scale-110 transition-transform`}>
+    <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-5 md:p-6 hover:border-ocean-500/30 transition-all duration-300 group">
+      <div className="flex items-start justify-between mb-3 sm:mb-4">
+        <span className="text-slate-400 text-xs sm:text-sm font-medium leading-tight">{label}</span>
+        <div className={`p-1.5 sm:p-2 rounded-lg bg-slate-700/50 ${color} group-hover:scale-110 transition-transform shrink-0`}>
           {icon}
         </div>
       </div>
-      <div className="flex items-end justify-between">
-        <h3 className="text-3xl font-display font-bold text-white">{value}</h3>
-        <span className={`text-sm font-medium ${trendColor} flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded`}>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <h3 className="text-2xl sm:text-3xl font-display font-bold text-white truncate">{value}</h3>
+        <span className={`text-xs sm:text-sm font-medium ${trendColor} flex items-center gap-1 bg-slate-900/50 px-2 py-1 rounded whitespace-nowrap self-start sm:self-auto`}>
           {trendArrow} {change}
         </span>
       </div>

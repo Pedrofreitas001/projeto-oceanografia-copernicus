@@ -95,7 +95,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation }) => {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KPICard 
           label="SST Temperature" 
           value={`${metrics.temp}°C`} 
