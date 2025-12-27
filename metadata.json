@@ -1,0 +1,5 @@
+{
+  "name": "Ocean Data Pipeline",
+  "description": "Real-time oceanographic monitoring dashboard tracking temperature, salinity, and anomalies in the South Atlantic.",
+  "requestFramePermissions": []
+}
