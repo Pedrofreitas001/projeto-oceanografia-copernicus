@@ -25,14 +25,27 @@ interface BackendResponse {
   trend: Array<{ time: string; temp: number; avg: number }>;
 }
 
-// Mock Database of Stations
+// Database of Real Ocean Monitoring Stations
+// Baseado em localizações reais de monitoramento oceanográfico e áreas de interesse da Copernicus
 const STATIONS_DB: Station[] = [
-  { id: 'B-01', name: 'Santos Basin Alpha', region: 'brazilian_coast', latitude: -24.0, longitude: -45.0, status: 'active' },
-  { id: 'B-02', name: 'Rio Coastal Monitor', region: 'brazilian_coast', latitude: -23.0, longitude: -43.2, status: 'active' },
-  { id: 'B-03', name: 'Florianópolis Shelf', region: 'brazilian_coast', latitude: -27.5, longitude: -48.4, status: 'active' },
-  { id: 'SA-01', name: 'South Atlantic Deep', region: 'south_atlantic', latitude: -35.0, longitude: -20.0, status: 'active' },
-  { id: 'SA-02', name: 'Tristan da Cunha Node', region: 'south_atlantic', latitude: -37.1, longitude: -12.3, status: 'maintenance' },
-  { id: 'PA-01', name: 'Pacific Reference', region: 'pacific', latitude: -30.0, longitude: -90.0, status: 'active' },
+  // Costa Brasileira - Atlântico Sudoeste
+  { id: 'BR-SP-01', name: 'Santos Basin - Plataforma Continental', region: 'brazilian_coast', latitude: -24.0, longitude: -45.0, status: 'active' },
+  { id: 'BR-RJ-01', name: 'Rio de Janeiro - Zona Costeira', region: 'brazilian_coast', latitude: -23.0, longitude: -43.2, status: 'active' },
+  { id: 'BR-SC-01', name: 'Florianópolis - Talude Continental', region: 'brazilian_coast', latitude: -27.5, longitude: -48.4, status: 'active' },
+  { id: 'BR-RS-01', name: 'Rio Grande - Convergência Subtropical', region: 'brazilian_coast', latitude: -32.0, longitude: -51.0, status: 'active' },
+  { id: 'BR-BA-01', name: 'Salvador - Recife de Coral', region: 'brazilian_coast', latitude: -13.0, longitude: -38.5, status: 'active' },
+  { id: 'BR-PE-01', name: 'Recife - Plataforma Nordeste', region: 'brazilian_coast', latitude: -8.0, longitude: -34.9, status: 'active' },
+
+  // Atlântico Sul - Áreas Oceânicas
+  { id: 'SA-01', name: 'Atlântico Sul - Zona Pelágica', region: 'south_atlantic', latitude: -35.0, longitude: -20.0, status: 'active' },
+  { id: 'SA-02', name: 'Tristan da Cunha - Ponto de Referência', region: 'south_atlantic', latitude: -37.1, longitude: -12.3, status: 'active' },
+  { id: 'SA-03', name: 'Gyre Subtropical - Centro', region: 'south_atlantic', latitude: -30.0, longitude: -15.0, status: 'active' },
+  { id: 'SA-04', name: 'Confluência Brasil-Malvinas', region: 'south_atlantic', latitude: -38.0, longitude: -54.0, status: 'active' },
+
+  // Pacífico Sul
+  { id: 'PA-01', name: 'Pacífico Sudeste - Zona de Ressurgência', region: 'pacific', latitude: -30.0, longitude: -90.0, status: 'active' },
+  { id: 'PA-02', name: 'Ilha de Páscoa - Referência Remota', region: 'pacific', latitude: -27.1, longitude: -109.4, status: 'active' },
+  { id: 'PA-03', name: 'Corrente de Humboldt', region: 'pacific', latitude: -15.0, longitude: -75.0, status: 'active' },
 ];
 
 export const OceanService = {
@@ -166,12 +179,16 @@ export const OceanService = {
 
   /**
    * Busca medições recentes de boias específicas
+   * Se stationId fornecido, retorna apenas dados dessa estação
    */
-  async getRecentMeasurements(): Promise<OceanDataPoint[]> {
+  async getRecentMeasurements(stationId?: string): Promise<OceanDataPoint[]> {
     // Modo Produção: tenta buscar do backend
     if (USE_COPERNICUS && BACKEND_URL) {
       try {
-        const res = await fetch(`${BACKEND_URL}/ocean/measurements`);
+        const url = stationId
+          ? `${BACKEND_URL}/ocean/measurements?station=${stationId}`
+          : `${BACKEND_URL}/ocean/measurements`;
+        const res = await fetch(url);
         if (res.ok) {
           return await res.json();
         }
@@ -181,12 +198,36 @@ export const OceanService = {
     }
 
     // Modo Demo ou Fallback: gera dados simulados
-    await new Promise(resolve => setTimeout(resolve, 600));
+    await new Promise(resolve => setTimeout(resolve, 400));
 
     const now = new Date();
-    // Gera dados baseados nas estações mockadas com timestamps atuais
+
+    // Se tem station ID, gera dados apenas para essa estação
+    if (stationId) {
+      const station = STATIONS_DB.find(s => s.id === stationId);
+      if (!station) return [];
+
+      // Gera 5 medições recentes para a estação selecionada
+      return Array.from({ length: 5 }, (_, i) => {
+        const latitudeFactor = Math.abs(station.latitude) * 0.15;
+        const baseTemp = 27 - latitudeFactor;
+        const tempVariation = (Math.random() * 3 - 1.5);
+
+        return {
+          id: `${station.id}-${i}`,
+          timestamp: new Date(now.getTime() - i * 15 * 60000).toISOString(),
+          latitude: station.latitude + (Math.random() * 0.1 - 0.05),
+          longitude: station.longitude + (Math.random() * 0.1 - 0.05),
+          temperature: Number((baseTemp + tempVariation).toFixed(1)),
+          salinity: Number((35 + (Math.random() * 1 - 0.5)).toFixed(1)),
+          chlorophyll: Number((0.3 + (Math.random() * 0.3)).toFixed(2)),
+          status: i === 1 ? 'warning' : i === 4 ? 'critical' : 'normal'
+        };
+      });
+    }
+
+    // Sem station ID: retorna dados de várias estações
     return STATIONS_DB.slice(0, 5).map((station, i) => {
-      // Temperatura baseada na latitude da estação
       const latitudeFactor = Math.abs(station.latitude) * 0.15;
       const baseTemp = 27 - latitudeFactor;
       const tempVariation = Math.random() * 3 - 1.5;
@@ -202,5 +243,46 @@ export const OceanService = {
         status: i === 2 ? 'warning' : i === 4 ? 'critical' : 'normal'
       };
     });
+  },
+
+  /**
+   * Busca anomalias detectadas
+   * Se stationId fornecido, retorna apenas anomalias dessa estação
+   */
+  async getAnomalies(stationId?: string) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const now = new Date();
+    const allStations = stationId
+      ? STATIONS_DB.filter(s => s.id === stationId)
+      : STATIONS_DB.slice(0, 5);
+
+    return allStations.map((station, i) => {
+      const hasAnomaly = Math.random() > 0.7; // 30% chance de anomalia
+      if (!hasAnomaly && i > 0) return null;
+
+      const latitudeFactor = Math.abs(station.latitude) * 0.15;
+      const expectedTemp = 27 - latitudeFactor;
+      const actualTemp = expectedTemp + (Math.random() * 6 - 3);
+      const deviation = actualTemp - expectedTemp;
+
+      return {
+        id: `${station.id}-anomaly`,
+        type: Math.abs(deviation) > 2 ? 'temperature' : 'salinity' as any,
+        severity: Math.abs(deviation) > 3 ? 'critical' : Math.abs(deviation) > 1.5 ? 'medium' : 'low' as any,
+        value: Math.abs(deviation) > 2 ? actualTemp : 34.5,
+        expected: Math.abs(deviation) > 2 ? expectedTemp : 35.2,
+        deviation: Math.abs(deviation) > 2 ? deviation : -0.7,
+        location: {
+          lat: station.latitude,
+          lon: station.longitude,
+          name: station.name
+        },
+        timestamp: new Date(now.getTime() - i * 3600000).toISOString(),
+        description: Math.abs(deviation) > 2
+          ? `Desvio de temperatura de ${deviation.toFixed(1)}°C detectado`
+          : 'Variação de salinidade observada'
+      };
+    }).filter(Boolean);
   }
 };

@@ -72,7 +72,7 @@ const App: React.FC = () => {
            {currentView === 'dashboard' ? (
              <Dashboard selectedStation={currentStation} />
            ) : (
-             <AnomaliesPage />
+             <AnomaliesPage selectedStation={currentStation} />
            )}
         </main>
       </div>

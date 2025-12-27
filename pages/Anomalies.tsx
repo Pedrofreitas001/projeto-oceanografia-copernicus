@@ -1,22 +1,59 @@
-import React, { useState } from 'react';
-import { 
-  AlertTriangle, 
-  Thermometer, 
-  Droplets, 
+import React, { useState, useEffect } from 'react';
+import {
+  AlertTriangle,
+  Thermometer,
+  Droplets,
   Wind,
   Search,
   MapPin,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
-import { ANOMALIES } from '../constants';
+import { OceanService } from '../services/api';
+import { Station } from '../types';
 
-export const AnomaliesPage: React.FC = () => {
+interface AnomaliesPageProps {
+  selectedStation: Station | null;
+}
+
+export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ selectedStation }) => {
   const [filter, setFilter] = useState<'all' | 'temperature' | 'salinity' | 'currents'>('all');
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredAnomalies = filter === 'all' 
-    ? ANOMALIES 
-    : ANOMALIES.filter(a => a.type === filter);
+  // Fetch anomalies when selected station changes
+  useEffect(() => {
+    const loadAnomalies = async () => {
+      try {
+        setLoading(true);
+        const stationId = selectedStation ? selectedStation.id : undefined;
+        const data = await OceanService.getAnomalies(stationId);
+        setAnomalies(data);
+        console.log(`🚨 Loaded ${data.length} anomalies for station: ${selectedStation?.name || 'All Stations'}`);
+      } catch (error) {
+        console.error('Failed to load anomalies', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAnomalies();
+  }, [selectedStation]);
+
+  const filteredAnomalies = filter === 'all'
+    ? anomalies
+    : anomalies.filter(a => a.type === filter);
+
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4">
+        <Loader2 className="animate-spin text-ocean-500" size={48} />
+        <p className="animate-pulse">
+          {selectedStation ? `Loading anomalies for ${selectedStation.name}...` : 'Loading anomalies...'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-8 h-full overflow-y-auto pb-24">
@@ -25,10 +62,19 @@ export const AnomaliesPage: React.FC = () => {
         <h2 className="text-2xl md:text-3xl font-display font-bold text-white flex items-center gap-3">
           <AlertTriangle className="text-yellow-500" size={32} />
           Detected Anomalies
+          {selectedStation && (
+            <span className="text-sm font-sans font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">
+              {selectedStation.name}
+            </span>
+          )}
         </h2>
         <p className="text-slate-400 max-w-2xl">
-          AI-driven detection of oceanographic irregularities. 
-          <span className="text-red-400 font-semibold ml-1">3 unresolved issues</span> require attention.
+          AI-driven detection of oceanographic irregularities.
+          {anomalies.length > 0 && (
+            <span className="text-red-400 font-semibold ml-1">
+              {anomalies.length} {anomalies.length === 1 ? 'issue' : 'issues'} detected
+            </span>
+          )}
         </p>
       </div>
 

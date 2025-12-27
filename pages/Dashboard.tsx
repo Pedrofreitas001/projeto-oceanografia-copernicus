@@ -24,21 +24,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation }) => {
   const [recentData, setRecentData] = useState<OceanDataPoint[]>([]);
   const [metrics, setMetrics] = useState({ temp: 0, salinity: 0, chlorophyll: 0 });
   const [trendData, setTrendData] = useState<any[]>([]);
+  const [anomalyCount, setAnomalyCount] = useState(0);
 
   // Recarregar dados sempre que a estação selecionada mudar
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setLoading(true);
-        
+
         // Use station coordinates if selected, otherwise default to Santos Basin (-24, -45)
         const lat = selectedStation ? selectedStation.latitude : -24.0;
         const lon = selectedStation ? selectedStation.longitude : -45.0;
+        const stationId = selectedStation ? selectedStation.id : undefined;
 
-        // Parallel fetching
-        const [dashboardData, recentMeasurements] = await Promise.all([
+        // Parallel fetching - AGORA FILTRANDO POR ESTAÇÃO
+        const [dashboardData, recentMeasurements, anomalies] = await Promise.all([
           OceanService.getDashboardData(lat, lon),
-          OceanService.getRecentMeasurements()
+          OceanService.getRecentMeasurements(stationId),
+          OceanService.getAnomalies(stationId)
         ]);
 
         setMetrics({
@@ -48,6 +51,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation }) => {
         });
         setTrendData(dashboardData.trend);
         setRecentData(recentMeasurements);
+        setAnomalyCount(anomalies.length);
+
+        console.log(`📊 Loaded data for station: ${selectedStation?.name || 'All Stations'}`);
+        console.log(`  - Measurements: ${recentMeasurements.length}`);
+        console.log(`  - Anomalies: ${anomalies.length}`);
       } catch (err) {
         console.error("Failed to load dashboard", err);
       } finally {
@@ -166,7 +174,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation }) => {
           {/* Anomaly Quick List */}
           <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
             <div className="p-5 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="font-semibold text-white">Recent Alerts</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white">Recent Alerts</h3>
+                {anomalyCount > 0 && (
+                  <span className="bg-red-500/20 text-red-400 text-xs py-0.5 px-2 rounded-full border border-red-500/20">
+                    {anomalyCount}
+                  </span>
+                )}
+              </div>
               <button className="text-xs text-ocean-400 hover:text-ocean-300 font-medium">View All</button>
             </div>
             <div className="divide-y divide-slate-700/50">
