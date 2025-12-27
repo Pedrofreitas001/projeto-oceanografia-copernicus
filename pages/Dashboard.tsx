@@ -26,6 +26,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
   const [metrics, setMetrics] = useState({ temp: 0, salinity: 0, chlorophyll: 0 });
   const [trendData, setTrendData] = useState<any[]>([]);
   const [anomalyCount, setAnomalyCount] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Detect API mode from environment
+  const apiMode = (import.meta as any).env?.VITE_API_MODE || 'demo';
+  const isProduction = apiMode === 'production';
 
   // Recarregar dados sempre que a estação selecionada mudar
   useEffect(() => {
@@ -53,10 +58,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
         setTrendData(dashboardData.trend);
         setRecentData(recentMeasurements);
         setAnomalyCount(anomalies.length);
+        setLastUpdated(new Date());
 
         console.log(`📊 Loaded data for station: ${selectedStation?.name || 'All Stations'}`);
         console.log(`  - Measurements: ${recentMeasurements.length}`);
         console.log(`  - Anomalies: ${anomalies.length}`);
+        console.log(`  - API Mode: ${isProduction ? 'Production (Copernicus)' : 'Demo (Open-Meteo)'}`);
       } catch (err) {
         console.error("Failed to load dashboard", err);
       } finally {
@@ -82,19 +89,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
     <div className="p-6 md:p-8 space-y-8 h-full overflow-y-auto pb-24">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-display font-bold text-white flex items-center gap-3">
-            {selectedStation ? selectedStation.name : 'South Atlantic Overview'}
-            {selectedStation && <span className="text-sm font-sans font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">Station ID: {selectedStation.id}</span>}
-          </h2>
-          <p className="text-slate-400 mt-1 flex items-center gap-2">
-            <MapPin size={14} />
-            {selectedStation 
-              ? `Lat: ${selectedStation.latitude.toFixed(4)}, Lon: ${selectedStation.longitude.toFixed(4)}` 
-              : 'Real-time monitoring network status'}
-          </p>
+        <div className="flex-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-2xl md:text-3xl font-display font-bold text-white">
+              {selectedStation ? selectedStation.name : 'South Atlantic Overview'}
+            </h2>
+            {selectedStation && (
+              <span className="text-sm font-sans font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">
+                Station ID: {selectedStation.id}
+              </span>
+            )}
+            <span className={`text-xs font-bold px-2 py-1 rounded border ${
+              isProduction
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+            }`}>
+              {isProduction ? 'COPERNICUS API' : 'DEMO MODE'}
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-2">
+            <p className="text-slate-400 flex items-center gap-2">
+              <MapPin size={14} />
+              {selectedStation
+                ? `Lat: ${selectedStation.latitude.toFixed(4)}, Lon: ${selectedStation.longitude.toFixed(4)}`
+                : 'Real-time monitoring network status'}
+            </p>
+            <p className="text-slate-400 flex items-center gap-2">
+              <Clock size={14} />
+              <span className="text-xs">
+                Last updated: {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <span className="flex h-3 w-3 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
@@ -205,8 +233,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
 
           {/* Recent Data Table */}
            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col h-[400px]">
-            <div className="p-5 border-b border-slate-700">
+            <div className="p-5 border-b border-slate-700 flex justify-between items-center">
               <h3 className="font-semibold text-white">Live Data Feed</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">
+                  {selectedStation ? `${recentData.length} records from ${selectedStation.id}` : `${recentData.length} recent records`}
+                </span>
+                {recentData.length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-auto">
               <table className="w-full text-left text-sm text-slate-400">

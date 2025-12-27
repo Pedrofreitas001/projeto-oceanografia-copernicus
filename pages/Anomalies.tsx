@@ -8,7 +8,8 @@ import {
   MapPin,
   Calendar,
   ChevronDown,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { OceanService } from '../services/api';
 import { Station } from '../types';
@@ -21,6 +22,11 @@ export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ selectedStation })
   const [filter, setFilter] = useState<'all' | 'temperature' | 'salinity' | 'currents'>('all');
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Detect API mode from environment
+  const apiMode = (import.meta as any).env?.VITE_API_MODE || 'demo';
+  const isProduction = apiMode === 'production';
 
   // Fetch anomalies when selected station changes
   useEffect(() => {
@@ -30,7 +36,9 @@ export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ selectedStation })
         const stationId = selectedStation ? selectedStation.id : undefined;
         const data = await OceanService.getAnomalies(stationId);
         setAnomalies(data);
+        setLastUpdated(new Date());
         console.log(`🚨 Loaded ${data.length} anomalies for station: ${selectedStation?.name || 'All Stations'}`);
+        console.log(`  - API Mode: ${isProduction ? 'Production (Copernicus)' : 'Demo (Open-Meteo)'}`);
       } catch (error) {
         console.error('Failed to load anomalies', error);
       } finally {
@@ -58,24 +66,41 @@ export const AnomaliesPage: React.FC<AnomaliesPageProps> = ({ selectedStation })
   return (
     <div className="p-6 md:p-8 space-y-8 h-full overflow-y-auto pb-24">
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h2 className="text-2xl md:text-3xl font-display font-bold text-white flex items-center gap-3">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <AlertTriangle className="text-yellow-500" size={32} />
-          Detected Anomalies
+          <h2 className="text-2xl md:text-3xl font-display font-bold text-white">
+            Detected Anomalies
+          </h2>
           {selectedStation && (
             <span className="text-sm font-sans font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">
               {selectedStation.name}
             </span>
           )}
-        </h2>
-        <p className="text-slate-400 max-w-2xl">
-          AI-driven detection of oceanographic irregularities.
-          {anomalies.length > 0 && (
-            <span className="text-red-400 font-semibold ml-1">
-              {anomalies.length} {anomalies.length === 1 ? 'issue' : 'issues'} detected
+          <span className={`text-xs font-bold px-2 py-1 rounded border ${
+            isProduction
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+          }`}>
+            {isProduction ? 'COPERNICUS API' : 'DEMO MODE'}
+          </span>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+          <p className="text-slate-400">
+            AI-driven detection of oceanographic irregularities.
+            {anomalies.length > 0 && (
+              <span className="text-red-400 font-semibold ml-1">
+                {anomalies.length} {anomalies.length === 1 ? 'issue' : 'issues'} detected
+              </span>
+            )}
+          </p>
+          <p className="text-slate-400 flex items-center gap-2">
+            <Clock size={14} />
+            <span className="text-xs">
+              Last updated: {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
-          )}
-        </p>
+          </p>
+        </div>
       </div>
 
       {/* Filters Toolbar */}
