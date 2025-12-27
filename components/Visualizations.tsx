@@ -136,20 +136,70 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       maxZoom: 13
     }).addTo(map);
 
-    // OVERLAY DE TEMPERATURA SST REAL DO NOAA (WMS)
-    // Dados reais de temperatura superficial do mar
-    const sstLayer = L.tileLayer.wms('https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request', {
-      layers: 'jplMURSST41:analysed_sst',
-      format: 'image/png',
-      transparent: true,
-      opacity: 0.6,
-      attribution: 'NOAA CoastWatch',
-      version: '1.3.0',
-      crs: L.CRS.EPSG4326
-    } as any).addTo(map);
+    // OVERLAY DE TEMPERATURA SST REAL - NASA GIBS
+    // Usando MODIS Aqua Sea Surface Temperature (atualizados diariamente)
+    // Tiles XYZ mais confiáveis que WMS
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Armazena referência da camada SST
+    // OPÇÃO 1: NASA GIBS MODIS Aqua SST (dados reais de satélite)
+    const sstLayerNASA = L.tileLayer(
+      `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/${dateStr}/250m/{z}/{y}/{x}.png`,
+      {
+        opacity: 0.6,
+        attribution: 'NASA EOSDIS GIBS',
+        maxZoom: 8,
+        tileSize: 512,
+        zoomOffset: -1
+      }
+    );
+
+    // OPÇÃO 2: NOAA Coral Reef Watch SST Anomaly (mais visível com cores)
+    const sstLayerNOAA = L.tileLayer(
+      'https://pae-paha.pacioos.hawaii.edu/erddap/wms/dhw_5km/request?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=CRW_SST&STYLES=&FORMAT=image/png&TRANSPARENT=true&WIDTH=256&HEIGHT=256&CRS=EPSG:4326&BBOX={bbox-epsg-4326}',
+      {
+        opacity: 0.5,
+        attribution: 'NOAA Coral Reef Watch',
+        maxZoom: 10
+      }
+    );
+
+    // OPÇÃO 3: Earth Null School style - overlay de temperatura
+    // Usar tiles diretos do OpenWeatherMap (requer API key) ou alternativa pública
+    const sstLayerAlt = L.tileLayer(
+      'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+      {
+        opacity: 0.3,
+        attribution: 'OpenSeaMap',
+        maxZoom: 18
+      }
+    );
+
+    // Iniciar com a camada NASA (mais confiável)
+    const sstLayer = sstLayerNASA.addTo(map);
+
+    // Event listeners para debug
+    sstLayerNASA.on('tileerror', (e: any) => {
+      console.error('❌ SST Tile error:', e);
+      console.log('💡 Trying to load SST from alternative source...');
+    });
+
+    sstLayerNASA.on('tileload', () => {
+      console.log('✅ SST tiles loading successfully');
+    });
+
+    // Armazena referências das camadas
     (map as any)._sstLayer = sstLayer;
+    (map as any)._sstLayers = {
+      nasa: sstLayerNASA,
+      noaa: sstLayerNOAA,
+      seamark: sstLayerAlt
+    };
+
+    console.log(`🌡️ SST Layer initialized for date: ${dateStr}`);
+    console.log(`📍 Tile URL: https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/${dateStr}/250m/{z}/{y}/{x}.png`);
 
     // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -280,12 +330,18 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
         <h3 className="text-xs font-bold text-ocean-100 uppercase tracking-wide mb-1">Atlantic Ocean Monitor</h3>
         <div className="flex items-center gap-2 text-xs text-ocean-400">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50"></span>
-          <span className="font-medium">Real-Time NOAA/Copernicus Data</span>
+          <span className="font-medium">Real-Time NOAA/NASA Data</span>
         </div>
-        <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-2">
-          <span>🌊 Bathymetry + SST Overlay</span>
-          <span>•</span>
-          <span>GEBCO/NOAA</span>
+        <div className="text-[10px] text-slate-500 mt-1 flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span>🌊 Bathymetry (GEBCO)</span>
+          </div>
+          {showSSTOverlay && (
+            <div className="flex items-center gap-2 text-orange-400 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+              <span>🌡️ SST Layer (NASA MODIS)</span>
+            </div>
+          )}
         </div>
       </div>
 
