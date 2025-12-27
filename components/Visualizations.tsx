@@ -94,9 +94,10 @@ export const SalinityChart: React.FC = () => {
 
 interface OceanMapProps {
   selectedStation: Station | null;
+  stations?: Station[];
 }
 
-export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation }) => {
+export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = [] }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
@@ -152,33 +153,46 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation }) => {
              </div>`
     });
 
-    // Add markers for static data (Mocking visualization of network)
-    RECENT_DATA.forEach(point => {
-      const isSelected = selectedStation && 
-                         Math.abs(point.latitude - selectedStation.latitude) < 0.1 && 
-                         Math.abs(point.longitude - selectedStation.longitude) < 0.1;
+    // Add markers for real stations (use stations prop or fallback to RECENT_DATA)
+    const dataToRender = stations.length > 0 ? stations : RECENT_DATA.map(d => ({
+      id: d.id,
+      name: `Station ${d.id}`,
+      latitude: d.latitude,
+      longitude: d.longitude,
+      status: d.status,
+      region: 'brazilian_coast' as const
+    }));
 
-      const isCritical = point.status === 'critical';
-      
+    dataToRender.forEach(station => {
+      const isSelected = selectedStation && station.id === selectedStation.id;
+      const isCritical = station.status === 'critical';
+
       let icon;
       if (isCritical) icon = createPulseIcon('bg-red-500', 'bg-red-500');
       else icon = createStationIcon(!!isSelected);
 
-      const marker = L.marker([point.latitude, point.longitude], { icon });
-      
-      const chl = (point as any).chlorophyll ? (point as any).chlorophyll : (Math.random() * 0.5 + 0.1).toFixed(2);
-      
+      const marker = L.marker([station.latitude, station.longitude], { icon });
+
+      // Generate mock sensor data for popup
+      const latitudeFactor = Math.abs(station.latitude) * 0.15;
+      const baseTemp = 27 - latitudeFactor;
+      const temp = (baseTemp + (Math.random() * 2 - 1)).toFixed(1);
+      const salinity = (35 + (Math.random() * 1 - 0.5)).toFixed(1);
+      const chl = (0.3 + Math.random() * 0.3).toFixed(2);
+
       marker.bindPopup(`
-        <div class="font-sans min-w-[150px]">
-          <h3 class="font-bold text-slate-100 text-sm mb-1">Station #${point.id}</h3>
+        <div class="font-sans min-w-[180px]">
+          <h3 class="font-bold text-slate-100 text-sm mb-1">${station.name}</h3>
+          <p class="text-xs text-slate-400 mb-2">ID: ${station.id}</p>
           <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-300">
-            <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${point.temperature}°C</span>
-            <span>Salinity:</span> <span>${point.salinity} PSU</span>
-            <span>Chl-a:</span> <span class="text-teal-400">${chl}</span>
+            <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${temp}°C</span>
+            <span>Salinity:</span> <span>${salinity} PSU</span>
+            <span>Chl-a:</span> <span class="text-teal-400">${chl} mg/m³</span>
+            <span>Status:</span> <span class="${station.status === 'active' ? 'text-green-400' : 'text-yellow-400'}">${station.status}</span>
           </div>
         </div>
       `);
-      
+
       marker.addTo(markersRef.current!);
 
       if (isSelected) {
@@ -195,7 +209,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation }) => {
       );
     }
 
-  }, [selectedStation]); // Re-run when selection changes
+  }, [selectedStation, stations]); // Re-run when selection or stations list changes
 
   return (
     <div className="relative w-full h-[250px] md:h-[400px] bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-xl group z-0">

@@ -1,11 +1,23 @@
 import { Anomaly, OceanDataPoint } from './types';
 
+// Helper para gerar timestamps atuais dinâmicos
+const now = new Date();
+const formatTimestamp = (minutesAgo: number) => {
+  const date = new Date(now.getTime() - minutesAgo * 60000);
+  return date.toISOString();
+};
+
+const formatTimestampForDisplay = (hoursAgo: number, minutesAgo: number = 0) => {
+  const date = new Date(now.getTime() - (hoursAgo * 3600000 + minutesAgo * 60000));
+  return date.toISOString().split('T')[0] + ' ' + date.toTimeString().split(' ')[0].slice(0, 5);
+};
+
 export const RECENT_DATA: OceanDataPoint[] = [
-  { id: '1', timestamp: '2024-12-27 14:30', latitude: -23.5, longitude: -45.2, temperature: 24.5, salinity: 35.2, status: 'normal' },
-  { id: '2', timestamp: '2024-12-27 14:15', latitude: -24.0, longitude: -44.8, temperature: 24.3, salinity: 35.3, status: 'normal' },
-  { id: '3', timestamp: '2024-12-27 14:00', latitude: -22.8, longitude: -45.5, temperature: 26.1, salinity: 34.9, status: 'warning' },
-  { id: '4', timestamp: '2024-12-27 13:45', latitude: -23.1, longitude: -44.2, temperature: 23.9, salinity: 35.4, status: 'normal' },
-  { id: '5', timestamp: '2024-12-27 13:30', latitude: -25.2, longitude: -46.1, temperature: 28.5, salinity: 34.1, status: 'critical' },
+  { id: '1', timestamp: formatTimestamp(0), latitude: -23.5, longitude: -45.2, temperature: 24.5, salinity: 35.2, status: 'normal' },
+  { id: '2', timestamp: formatTimestamp(15), latitude: -24.0, longitude: -44.8, temperature: 24.3, salinity: 35.3, status: 'normal' },
+  { id: '3', timestamp: formatTimestamp(30), latitude: -22.8, longitude: -45.5, temperature: 26.1, salinity: 34.9, status: 'warning' },
+  { id: '4', timestamp: formatTimestamp(45), latitude: -23.1, longitude: -44.2, temperature: 23.9, salinity: 35.4, status: 'normal' },
+  { id: '5', timestamp: formatTimestamp(60), latitude: -25.2, longitude: -46.1, temperature: 28.5, salinity: 34.1, status: 'critical' },
 ];
 
 export const ANOMALIES: Anomaly[] = [
@@ -17,7 +29,7 @@ export const ANOMALIES: Anomaly[] = [
     expected: 24.0,
     deviation: 4.5,
     location: { lat: -23.5, lon: -45.2, name: 'Santos Basin - St. 42' },
-    timestamp: '2024-12-27 14:30',
+    timestamp: formatTimestamp(30),
     description: 'Sudden temperature spike detected in deep water sensors.'
   },
   {
@@ -28,7 +40,7 @@ export const ANOMALIES: Anomaly[] = [
     expected: 35.2,
     deviation: -1.7,
     location: { lat: -24.0, lon: -44.8, name: 'Shelf Break - Buoy 09' },
-    timestamp: '2024-12-26 10:15',
+    timestamp: formatTimestamp(240), // 4 horas atrás
     description: 'Abnormal salinity drop suggesting potential sensor drift or freshwater influx.'
   },
   {
@@ -39,7 +51,7 @@ export const ANOMALIES: Anomaly[] = [
     expected: 0.5,
     deviation: 1.3,
     location: { lat: -22.8, lon: -43.1, name: 'Rio Coastal Zone' },
-    timestamp: '2024-12-25 08:00',
+    timestamp: formatTimestamp(2880), // 2 dias atrás
     description: 'Current velocity slightly above seasonal average.'
   }
 ];

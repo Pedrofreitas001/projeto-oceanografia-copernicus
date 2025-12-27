@@ -70,9 +70,9 @@ const App: React.FC = () => {
         {/* View Content */}
         <main className="flex-1 overflow-hidden relative">
            {currentView === 'dashboard' ? (
-             <Dashboard selectedStation={currentStation} />
+             <Dashboard selectedStation={currentStation} stations={stations} />
            ) : (
-             <AnomaliesPage />
+             <AnomaliesPage selectedStation={currentStation} />
            )}
         </main>
       </div>
