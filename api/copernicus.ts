@@ -90,17 +90,39 @@ export default async function handler(
       // Se falhar, retornar dados de demonstração
       console.warn('Copernicus API returned error, using fallback data');
 
+      // Gera dados únicos baseados em coordenadas geográficas
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lon);
+
+      // Temperatura: mais frio ao sul, varia com latitude
+      const baseTemp = 28 - (Math.abs(latitude) * 0.45);
+      const tempVariation = Math.sin(longitude * 0.1) * 1.5;
+      const temperature = Number((baseTemp + tempVariation).toFixed(1));
+
+      // Salinidade: varia com correntes oceânicas
+      const baseSalinity = 35.2;
+      const salinityVariation = (latitude < -30 ? -0.8 : 0) + Math.cos(longitude * 0.05) * 0.3;
+      const salinity = Number((baseSalinity + salinityVariation).toFixed(1));
+
+      // Clorofila: maior perto da costa (longitude menor em valor absoluto)
+      const coastalFactor = Math.max(0, (60 - Math.abs(longitude)) / 60);
+      const chlorophyll = Number((0.15 + coastalFactor * 0.35 + Math.random() * 0.1).toFixed(2));
+
+      // Velocidade da corrente: baseada em localização geográfica
+      const velocity = Number((0.2 + Math.abs(Math.sin(latitude * 0.1)) * 0.4 + Math.random() * 0.15).toFixed(2));
+
       return res.status(200).json({
         source: 'demo',
         message: 'Using demonstration data. Configure Copernicus credentials for real data.',
         data: {
-          temperature: 24.5 - (Math.abs(parseFloat(lat)) * 0.1),
-          salinity: 35.2,
-          chlorophyll: 0.42,
+          temperature,
+          salinity,
+          chlorophyll,
+          velocity,
           timestamp: new Date().toISOString(),
           location: {
-            lat: parseFloat(lat),
-            lon: parseFloat(lon)
+            lat: latitude,
+            lon: longitude
           }
         }
       });
@@ -128,17 +150,30 @@ export default async function handler(
     console.error('Copernicus API Error:', error);
 
     // Fallback para dados de demonstração em caso de erro
+    const latitude = parseFloat(req.query.lat as string || '-24.0');
+    const longitude = parseFloat(req.query.lon as string || '-45.0');
+
+    // Gera dados únicos baseados em coordenadas
+    const baseTemp = 28 - (Math.abs(latitude) * 0.45);
+    const temperature = Number((baseTemp + Math.sin(longitude * 0.1) * 1.5).toFixed(1));
+    const baseSalinity = 35.2;
+    const salinity = Number((baseSalinity + (latitude < -30 ? -0.8 : 0) + Math.cos(longitude * 0.05) * 0.3).toFixed(1));
+    const coastalFactor = Math.max(0, (60 - Math.abs(longitude)) / 60);
+    const chlorophyll = Number((0.15 + coastalFactor * 0.35 + Math.random() * 0.1).toFixed(2));
+    const velocity = Number((0.2 + Math.abs(Math.sin(latitude * 0.1)) * 0.4 + Math.random() * 0.15).toFixed(2));
+
     return res.status(200).json({
       source: 'demo_fallback',
       message: 'Error connecting to Copernicus API. Using demonstration data.',
       data: {
-        temperature: 24.5,
-        salinity: 35.2,
-        chlorophyll: 0.42,
+        temperature,
+        salinity,
+        chlorophyll,
+        velocity,
         timestamp: new Date().toISOString(),
         location: {
-          lat: parseFloat(req.query.lat as string || '-24.0'),
-          lon: parseFloat(req.query.lon as string || '-45.0')
+          lat: latitude,
+          lon: longitude
         }
       },
       error: error instanceof Error ? error.message : 'Unknown error'
