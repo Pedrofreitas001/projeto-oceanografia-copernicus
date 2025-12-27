@@ -139,6 +139,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     // ============================================================================
     // OVERLAY DE TEMPERATURA SST - DADOS DINÂMICOS EM TEMPO REAL
     // Usando WMTS da Copernicus Marine Service
+    // Produto: GLOBAL_ANALYSISFORECAST_PHY_001_024 (Sistema Global de Análise e Previsão)
     // ============================================================================
     console.log('🌡️ Creating DYNAMIC SST overlay from Copernicus Marine WMTS...');
 
@@ -146,31 +147,32 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1); // Usar ontem para garantir disponibilidade
-    const timeParam = yesterday.toISOString().split('T')[0] + 'T12:00:00.000Z';
+    const timeParam = yesterday.toISOString().split('T')[0] + 'T00:00:00.000Z';
 
-    // OPÇÃO 1: Global OSTIA SST (Operational Sea Surface Temperature Analysis)
-    // Produto: SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001
-    // Resolução: 1/20° (~6km) | Atualização: Diária
-    // STYLE ajustado para MÁXIMA VISIBILIDADE: range otimizado para oceano tropical/temperado
-    const copernicusWMTS_OSTIA = `https://wmts.marine.copernicus.eu/teroWmts?` +
+    // PRODUTO OFICIAL RECOMENDADO: GLOBAL_ANALYSISFORECAST_PHY_001_024
+    // Dataset: cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m
+    // Variável: thetao (temperatura da água do mar)
+    // Resolução: 1/12° (~8 km) | Atualização: Diária | Previsão: 10 dias
+    // Níveis Verticais: 50 níveis (0-5500m) | Modelo: NEMO
+    const PRODUCT_ID = 'GLOBAL_ANALYSISFORECAST_PHY_001_024';
+    const DATASET_ID = 'cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m';
+    const VARIABLE_ID = 'thetao';
+
+    const copernicusWMTS_Temperature = `https://wmts.marine.copernicus.eu/teroWmts?` +
       `SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
-      `&LAYER=SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001/cmems_obs-sst_glo_phy_nrt_l4_PT1H-m/analysed_sst` +
+      `&LAYER=${PRODUCT_ID}/${DATASET_ID}/${VARIABLE_ID}` +
       `&TILEMATRIXSET=EPSG:3857` +
       `&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
       `&FORMAT=image/png` +
       `&TIME=${timeParam}` +
-      `&STYLE=cmap:turbo,range:0/32`;  // turbo = colormap mais vibrante, range ajustado
-
-    // OPÇÃO 2 (Fallback): NASA GIBS MODIS Aqua SST
-    const nasaGIBS_SST = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/` +
-      `MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/` +
-      `${yesterday.toISOString().split('T')[0]}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
+      `&ELEVATION=-0.5` +  // Superfície do mar (0.5m de profundidade)
+      `&STYLE=cmap:turbo,range:0/32`;  // Turbo colormap para máxima visibilidade
 
     // Criar camada WMTS dinâmica com ALTA OPACIDADE para gradiente bem visível
-    const sstDynamicLayer = L.tileLayer(copernicusWMTS_OSTIA, {
-      opacity: 0.85,  // Aumentado de 0.6 para 0.85 (85% visível)
-      attribution: '© Copernicus Marine Service',
-      maxZoom: 10,
+    const sstDynamicLayer = L.tileLayer(copernicusWMTS_Temperature, {
+      opacity: 0.85,  // 85% visível para gradiente marcado
+      attribution: '© Copernicus Marine Service - GLOBAL_ANALYSISFORECAST_PHY_001_024',
+      maxZoom: 10,  // Limite baseado na resolução dos dados (~8km)
       minZoom: 2,
       crossOrigin: true,
       errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', // Transparent 1x1 pixel
@@ -189,10 +191,16 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     // Adicionar ao mapa
     sstDynamicLayer.addTo(map);
     console.log('✅ Dynamic SST WMTS overlay added (HIGH VISIBILITY)');
-    console.log(`📅 Using date: ${timeParam}`);
+    console.log(`📦 Product: ${PRODUCT_ID}`);
+    console.log(`🗂️ Dataset: ${DATASET_ID}`);
+    console.log(`🌡️ Variable: ${VARIABLE_ID} (Sea Water Temperature)`);
+    console.log(`📅 Time: ${timeParam}`);
+    console.log(`📏 Depth: -0.5m (surface)`);
     console.log(`🎨 Colormap: TURBO (vibrant blue→cyan→green→yellow→orange→red)`);
-    console.log(`📏 Range: 0°C to 32°C (optimized for tropical/temperate oceans)`);
+    console.log(`📊 Range: 0°C to 32°C (optimized for tropical/temperate oceans)`);
     console.log(`👁️ Opacity: 85% (high contrast)`);
+    console.log(`🗺️ Resolution: 1/12° (~8km)`);
+    console.log(`🔄 Update: Daily with 10-day forecast`);
 
     // Armazena referências das camadas
     (map as any)._sstLayer = sstDynamicLayer;
@@ -200,7 +208,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       dynamic: sstDynamicLayer
     };
 
-    console.log('🌊 SST Data Source: Copernicus Marine Service (OSTIA)');
+    console.log('🌊 Data Source: Copernicus Marine Service - NEMO Model (GLOBAL_ANALYSISFORECAST_PHY_001_024)');
 
     // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
