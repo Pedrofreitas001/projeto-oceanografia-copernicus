@@ -136,117 +136,58 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       maxZoom: 13
     }).addTo(map);
 
-    // OVERLAY DE TEMPERATURA SST - Múltiplas Fontes
-    console.log('🌡️ Initializing SST overlay layers...');
+    // OVERLAY DE TEMPERATURA SST - Zonas de Temperatura Simplificadas
+    console.log('🌡️ Creating SST temperature zones overlay...');
 
-    // Calcular data (usar 2 dias atrás para garantir disponibilidade)
-    const today = new Date();
-    const twoDaysAgo = new Date(today);
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-    const dateStr = twoDaysAgo.toISOString().split('T')[0];
+    // Criar camada de retângulos (polígonos) coloridos por faixa de latitude
+    const sstZonesLayer = L.layerGroup();
 
-    // OPÇÃO 1: RainViewer API - Temperatura do Mar (público, sem autenticação)
-    // Esta é uma das poucas APIs totalmente públicas com visualização de temperatura
-    const sstLayerRainViewer = L.tileLayer(
-      'https://tilecache.rainviewer.com/v2/coverage/0/{z}/{x}/{y}/2/1_0.png',
-      {
-        opacity: 0.4,
-        attribution: 'RainViewer',
-        maxZoom: 12
-      }
-    );
+    // Definir zonas de temperatura baseadas em latitude
+    const tempZones = [
+      { latMin: -90, latMax: -60, color: '#0000FF', temp: '0-5°C', name: 'Polar Sul' },
+      { latMin: -60, latMax: -40, color: '#0080FF', temp: '5-10°C', name: 'Subpolar' },
+      { latMin: -40, latMax: -23, color: '#00BFFF', temp: '10-15°C', name: 'Temperada Fria' },
+      { latMin: -23, latMax: -10, color: '#FFD700', temp: '15-20°C', name: 'Temperada Quente' },
+      { latMin: -10, latMax: 0, color: '#FFA500', temp: '20-25°C', name: 'Tropical Sul' },
+      { latMin: 0, latMax: 10, color: '#FF6347', temp: '25-28°C', name: 'Equatorial' },
+      { latMin: 10, latMax: 23, color: '#FFA500', temp: '20-25°C', name: 'Tropical Norte' },
+      { latMin: 23, latMax: 40, color: '#FFD700', temp: '15-20°C', name: 'Temperada Norte' },
+      { latMin: 40, latMax: 60, color: '#00BFFF', temp: '10-15°C', name: 'Subpolar Norte' },
+      { latMin: 60, latMax: 90, color: '#0080FF', temp: '5-10°C', name: 'Polar Norte' }
+    ];
 
-    // OPÇÃO 2: OpenWeatherMap - Temperatura Oceânica (cache público)
-    const sstLayerOpenWeather = L.tileLayer(
-      'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=',
-      {
-        opacity: 0.5,
-        attribution: 'OpenWeatherMap',
-        maxZoom: 10
-      }
-    );
+    // Criar retângulos para cada zona
+    tempZones.forEach(zone => {
+      const rectangle = L.rectangle(
+        [[zone.latMin, -180], [zone.latMax, 180]],
+        {
+          color: zone.color,
+          fillColor: zone.color,
+          fillOpacity: 0.25,
+          opacity: 0.4,
+          weight: 1
+        }
+      ).bindPopup(`
+        <div class="font-sans">
+          <h4 class="font-bold text-sm">${zone.name}</h4>
+          <p class="text-xs">Temperatura: ${zone.temp}</p>
+        </div>
+      `);
 
-    // OPÇÃO 3: Criar overlay visual customizado com gradiente
-    // Canvas layer que desenha gradiente baseado em latitude
-    const CanvasLayer = L.GridLayer.extend({
-      createTile: function(coords: any) {
-        const tile = document.createElement('canvas');
-        const tileSize = this.getTileSize();
-        tile.width = tileSize.x;
-        tile.height = tileSize.y;
-
-        const ctx = tile.getContext('2d');
-        if (!ctx) return tile;
-
-        // Calcular latitude aproximada do tile
-        const latLng = this.getTileLatLng(coords);
-        const lat = latLng ? latLng.lat : 0;
-
-        // Gradiente de temperatura baseado em latitude
-        // Vermelho (quente) perto do equador, azul (frio) nos polos
-        const tempFactor = (90 - Math.abs(lat)) / 90; // 0 a 1
-        const gradient = ctx.createLinearGradient(0, 0, 0, tileSize.y);
-
-        // Cores representando temperatura (vermelho=quente, azul=frio)
-        const r = Math.floor(255 * tempFactor);
-        const b = Math.floor(255 * (1 - tempFactor));
-        const g = Math.floor(128 * tempFactor);
-
-        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.3)`);
-        gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.2)`);
-
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, tileSize.x, tileSize.y);
-
-        return tile;
-      },
-      getTileLatLng: function(coords: any) {
-        const zoom = coords.z;
-        const n = Math.PI - 2 * Math.PI * coords.y / Math.pow(2, zoom);
-        return {
-          lat: (180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))),
-          lng: coords.x / Math.pow(2, zoom) * 360 - 180
-        };
-      }
+      sstZonesLayer.addLayer(rectangle);
     });
 
-    const sstLayerCustom = new CanvasLayer({
-      opacity: 0.4,
-      attribution: 'Gradient Visualization'
-    });
-
-    // Tentar carregar RainViewer primeiro, fallback para custom
-    let sstLayer: any;
-    let layerLoaded = false;
-
-    // Adicionar a camada customizada como fallback visual garantido
-    sstLayer = sstLayerCustom.addTo(map);
-    console.log('✅ Custom gradient SST layer added (always visible)');
-
-    // Tentar adicionar RainViewer por cima (se carregar)
-    const rainViewerLayer = sstLayerRainViewer.addTo(map);
-    rainViewerLayer.on('tileerror', () => {
-      console.warn('⚠️ RainViewer tiles not available');
-      map.removeLayer(rainViewerLayer);
-    });
-    rainViewerLayer.on('tileload', () => {
-      if (!layerLoaded) {
-        console.log('✅ RainViewer SST tiles loaded successfully');
-        layerLoaded = true;
-      }
-    });
+    // Adicionar a camada ao mapa
+    sstZonesLayer.addTo(map);
+    console.log('✅ SST temperature zones overlay added (VISIBLE)');
 
     // Armazena referências das camadas
-    (map as any)._sstLayer = sstLayer;
+    (map as any)._sstLayer = sstZonesLayer;
     (map as any)._sstLayers = {
-      custom: sstLayerCustom,
-      rainviewer: sstLayerRainViewer,
-      openweather: sstLayerOpenWeather
+      zones: sstZonesLayer
     };
-    (map as any)._sstActiveLayer = 'custom'; // Track which is active
 
-    console.log(`🌡️ SST Overlay initialized with gradient visualization`);
-    console.log(`📅 Date: ${dateStr}`);
+    console.log(`🌡️ SST Temperature Zones: ${tempZones.length} zones created`);
 
     // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
