@@ -151,6 +151,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     // OPÇÃO 1: Global OSTIA SST (Operational Sea Surface Temperature Analysis)
     // Produto: SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001
     // Resolução: 1/20° (~6km) | Atualização: Diária
+    // STYLE ajustado para MÁXIMA VISIBILIDADE: range otimizado para oceano tropical/temperado
     const copernicusWMTS_OSTIA = `https://wmts.marine.copernicus.eu/teroWmts?` +
       `SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
       `&LAYER=SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001/cmems_obs-sst_glo_phy_nrt_l4_PT1H-m/analysed_sst` +
@@ -158,16 +159,16 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
       `&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
       `&FORMAT=image/png` +
       `&TIME=${timeParam}` +
-      `&STYLE=cmap:thermal,range:-2/35`;
+      `&STYLE=cmap:turbo,range:0/32`;  // turbo = colormap mais vibrante, range ajustado
 
     // OPÇÃO 2 (Fallback): NASA GIBS MODIS Aqua SST
     const nasaGIBS_SST = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/` +
       `MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/` +
       `${yesterday.toISOString().split('T')[0]}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
 
-    // Criar camada WMTS dinâmica
+    // Criar camada WMTS dinâmica com ALTA OPACIDADE para gradiente bem visível
     const sstDynamicLayer = L.tileLayer(copernicusWMTS_OSTIA, {
-      opacity: 0.6,
+      opacity: 0.85,  // Aumentado de 0.6 para 0.85 (85% visível)
       attribution: '© Copernicus Marine Service',
       maxZoom: 10,
       minZoom: 2,
@@ -187,10 +188,11 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
     // Adicionar ao mapa
     sstDynamicLayer.addTo(map);
-    console.log('✅ Dynamic SST WMTS overlay added');
+    console.log('✅ Dynamic SST WMTS overlay added (HIGH VISIBILITY)');
     console.log(`📅 Using date: ${timeParam}`);
-    console.log(`🎨 Colormap: thermal (blue→orange→red)`);
-    console.log(`📏 Range: -2°C to 35°C`);
+    console.log(`🎨 Colormap: TURBO (vibrant blue→cyan→green→yellow→orange→red)`);
+    console.log(`📏 Range: 0°C to 32°C (optimized for tropical/temperate oceans)`);
+    console.log(`👁️ Opacity: 85% (high contrast)`);
 
     // Armazena referências das camadas
     (map as any)._sstLayer = sstDynamicLayer;
@@ -388,15 +390,16 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
         {showSSTOverlay && (
           <>
             <div className="border-t border-slate-700/50 my-2 pt-2">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Temperature</h4>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sea Surface Temp</h4>
               <div className="flex items-center gap-1 mb-1">
-                <div className="w-full h-3 rounded" style={{
-                  background: 'linear-gradient(to right, rgb(0, 0, 255), rgb(0, 128, 255), rgb(255, 128, 0), rgb(255, 0, 0))'
+                <div className="w-full h-4 rounded shadow-md" style={{
+                  background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff8800, #ff0000)'
                 }}></div>
               </div>
               <div className="flex justify-between text-[9px] text-slate-400">
-                <span>Cold</span>
-                <span>Warm</span>
+                <span>0°C</span>
+                <span>16°C</span>
+                <span>32°C</span>
               </div>
             </div>
           </>
