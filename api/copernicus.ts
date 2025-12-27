@@ -39,15 +39,25 @@ export default async function handler(
       endDate
     } = req.query as CopernicusParams;
 
-    const username = process.env.VITE_COPERNICUS_USERNAME;
-    const password = process.env.VITE_COPERNICUS_PASSWORD;
+    // Suporta múltiplos nomes de variáveis de ambiente
+    const username =
+      process.env.COPERNICUSMARINE_SERVICE_USERNAME ||
+      process.env.COPERNICUS_USERNAME ||
+      process.env.VITE_COPERNICUS_USERNAME;
+
+    const password =
+      process.env.COPERNICUSMARINE_SERVICE_PASSWORD ||
+      process.env.COPERNICUS_PASSWORD ||
+      process.env.VITE_COPERNICUS_PASSWORD;
 
     if (!username || !password) {
       return res.status(500).json({
         error: 'Copernicus credentials not configured',
-        message: 'Please set VITE_COPERNICUS_USERNAME and VITE_COPERNICUS_PASSWORD environment variables'
+        message: 'Please set COPERNICUSMARINE_SERVICE_USERNAME and COPERNICUSMARINE_SERVICE_PASSWORD (or COPERNICUS_USERNAME/COPERNICUS_PASSWORD) environment variables in Vercel'
       });
     }
+
+    console.log('🔐 Using Copernicus credentials for user:', username);
 
     // Copernicus Marine Data Store API endpoint
     // Nota: A API da Copernicus requer autenticação e usa diferentes endpoints
