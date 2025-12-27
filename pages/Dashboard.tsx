@@ -50,12 +50,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        setLoading(true);
-
         // Use station coordinates if selected, otherwise default to Santos Basin (-24, -45)
         const lat = selectedStation ? selectedStation.latitude : -24.0;
         const lon = selectedStation ? selectedStation.longitude : -45.0;
         const stationId = selectedStation ? selectedStation.id : undefined;
+
+        // CACHE: Tentar carregar dados do cache primeiro
+        const cacheKey = `ocean_data_${stationId || 'overview'}`;
+        const cachedData = localStorage.getItem(cacheKey);
+
+        if (cachedData) {
+          try {
+            const cached = JSON.parse(cachedData);
+            const cacheAge = Date.now() - new Date(cached.timestamp).getTime();
+
+            // Se o cache tem menos de 5 minutos, usar dados do cache enquanto carrega novos
+            if (cacheAge < 5 * 60 * 1000) {
+              console.log(`📦 Loaded cached data for ${stationId || 'overview'} (${Math.round(cacheAge / 1000)}s old)`);
+
+              setMetrics(cached.metrics);
+              setTrendData(cached.trendData || []);
+              setRecentData(cached.recentData || []);
+              setAnomalyCount(cached.anomalyCount || 0);
+              setLastUpdated(new Date(cached.timestamp));
+              setLoading(false);
+
+              // Continua carregando dados frescos em background
+            }
+          } catch (e) {
+            console.error('Failed to parse cached data');
+          }
+        } else {
+          setLoading(true);
+        }
 
         // Parallel fetching - AGORA FILTRANDO POR ESTAÇÃO
         const [dashboardData, recentMeasurements, anomalies] = await Promise.all([
@@ -79,6 +106,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
         setRecentData(recentMeasurements);
         setAnomalyCount(anomalies.length);
         setLastUpdated(now);
+
+        // CACHE: Salvar dados no localStorage (reutilizar cacheKey já declarado)
+        const cacheData = {
+          metrics: newMetrics,
+          trendData: dashboardData.trend,
+          recentData: recentMeasurements,
+          anomalyCount: anomalies.length,
+          timestamp: now.toISOString(),
+          stationId: stationId || 'overview'
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        console.log(`💾 Cached data for ${stationId || 'overview'}`);
 
         // Save to historical data (keep last 24 entries = 24 hours if updated hourly)
         const historyEntry = {
@@ -240,7 +279,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map Section - Takes up 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          <OceanMap selectedStation={selectedStation} stations={stations} />
+          <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">

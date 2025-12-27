@@ -95,12 +95,19 @@ export const SalinityChart: React.FC = () => {
 interface OceanMapProps {
   selectedStation: Station | null;
   stations?: Station[];
+  metrics?: {
+    temp: number;
+    salinity: number;
+    chlorophyll: number;
+    velocity: number;
+  };
 }
 
-export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = [] }) => {
+export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = [], metrics }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
+  const [showSSTOverlay, setShowSSTOverlay] = React.useState(true);
 
   // Initialize Map
   useEffect(() => {
@@ -109,25 +116,137 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
     const map = L.map(mapContainer.current, {
       zoomControl: false,
-      attributionControl: false
+      attributionControl: false,
+      minZoom: 3,
+      maxZoom: 12
     }).setView([-23.5, -45.0], 6);
-    
+
     mapInstance.current = map;
     markersRef.current = L.layerGroup().addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19
+    // Camada Base - Batimetria Oceanográfica
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Esri, GEBCO, NOAA',
+      maxZoom: 13
     }).addTo(map);
 
+    // Overlay de batimetria/relevo
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
+      opacity: 0.5,
+      maxZoom: 13
+    }).addTo(map);
+
+    // ============================================================================
+    // OVERLAY DE TEMPERATURA SST - DADOS DINÂMICOS EM TEMPO REAL
+    // Usando WMS da NOAA CoastWatch ERDDAP
+    // Dataset: JPL MUR SST (Multi-scale Ultra-high Resolution)
+    // ============================================================================
+    console.log('🌡️ Creating DYNAMIC SST overlay from NOAA CoastWatch WMS...');
+
+    // Data mais recente disponível (ontem para garantir disponibilidade)
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const timeParam = yesterday.toISOString().split('T')[0];
+
+    // NOAA CoastWatch ERDDAP - WMS Service
+    // Dataset: jplMURSST41 (JPL Multi-scale Ultra-high Resolution SST)
+    // Resolução: 0.01° (~1km) | Global | 2002-present | Atualização: Diária
+    // Fonte: GHRSST Level 4 MUR Global Foundation SST Analysis
+    const wmsBaseUrl = 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request';
+
+    const sstDynamicLayer = L.tileLayer.wms(wmsBaseUrl, {
+      layers: 'jplMURSST41:analysed_sst',
+      format: 'image/png',
+      transparent: true,
+      version: '1.3.0',
+      crs: L.CRS.EPSG4326,
+      time: timeParam,
+      colorscalerange: '0,32',  // Range de temperatura otimizado
+      opacity: 0.7,  // 70% para boa visibilidade mantendo mapa base visível
+      attribution: '© NOAA CoastWatch - JPL MUR SST',
+      maxZoom: 12,
+      minZoom: 2,
+    } as any);
+
+    // Event listeners para debugging e verificação
+    sstDynamicLayer.on('tileerror', (e: any) => {
+      console.error('❌ SST tile load error:', {
+        coords: e.coords,
+        url: e.tile?.src,
+        error: e.error
+      });
+    });
+
+    let tilesLoaded = 0;
+    sstDynamicLayer.on('tileload', (e: any) => {
+      tilesLoaded++;
+      if (tilesLoaded <= 3) {
+        console.log(`✅ SST tile ${tilesLoaded} loaded successfully:`, e.coords);
+      }
+    });
+
+    // Adicionar ao mapa
+    sstDynamicLayer.addTo(map);
+    console.log('✅ Dynamic SST WMS overlay added (HIGH VISIBILITY)');
+    console.log(`📦 Service: NOAA CoastWatch ERDDAP WMS`);
+    console.log(`🗂️ Dataset: jplMURSST41 (JPL MUR SST)`);
+    console.log(`🌡️ Variable: analysed_sst (Sea Surface Temperature)`);
+    console.log(`📅 Time: ${timeParam}`);
+    console.log(`📏 Surface: 0m depth`);
+    console.log(`🎨 Colormap: Default thermal gradient`);
+    console.log(`📊 Range: 0°C to 32°C`);
+    console.log(`👁️ Opacity: 70%`);
+    console.log(`🗺️ Resolution: 0.01° (~1km) - Ultra-high resolution!`);
+    console.log(`🔄 Update: Daily`);
+    console.log(`🌐 Coverage: Global ocean`);
+    console.log(`📍 WMS URL: ${wmsBaseUrl}`);
+
+    // Armazena referências das camadas
+    (map as any)._sstLayer = sstDynamicLayer;
+    (map as any)._sstLayers = {
+      dynamic: sstDynamicLayer
+    };
+
+    console.log('🌊 Data Source: NOAA CoastWatch - GHRSST MUR SST Analysis');
+
+    // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.scale({
+      position: 'bottomleft',
+      imperial: false,
+      metric: true
+    }).addTo(map);
 
     return () => {
       map.remove();
       mapInstance.current = null;
     };
   }, []);
+
+  // Toggle SST Overlay
+  useEffect(() => {
+    if (!mapInstance.current) return;
+
+    const map = mapInstance.current;
+    const sstLayers = (map as any)._sstLayers;
+
+    if (sstLayers && sstLayers.dynamic) {
+      if (showSSTOverlay) {
+        // Adicionar camada SST dinâmica (WMTS)
+        if (!map.hasLayer(sstLayers.dynamic)) {
+          sstLayers.dynamic.addTo(map);
+          console.log('🌡️ Dynamic SST overlay enabled (Copernicus WMTS)');
+        }
+      } else {
+        // Remover camada SST dinâmica
+        if (map.hasLayer(sstLayers.dynamic)) {
+          map.removeLayer(sstLayers.dynamic);
+          console.log('🌡️ Dynamic SST overlay disabled');
+        }
+      }
+    }
+  }, [showSSTOverlay]);
 
   // Handle Station Change (FlyTo) and Markers
   useEffect(() => {
@@ -173,23 +292,31 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
       const marker = L.marker([station.latitude, station.longitude], { icon });
 
-      // Generate mock sensor data for popup
-      const latitudeFactor = Math.abs(station.latitude) * 0.15;
-      const baseTemp = 27 - latitudeFactor;
-      const temp = (baseTemp + (Math.random() * 2 - 1)).toFixed(1);
-      const salinity = (35 + (Math.random() * 1 - 0.5)).toFixed(1);
-      const chl = (0.3 + Math.random() * 0.3).toFixed(2);
+      // Use real API data if this is the selected station and metrics are available
+      // Otherwise show "Select station" message
+      const useRealData = isSelected && metrics;
+      const temp = useRealData ? metrics.temp.toFixed(1) : 'N/A';
+      const salinity = useRealData ? metrics.salinity.toFixed(1) : 'N/A';
+      const chl = useRealData ? metrics.chlorophyll.toFixed(2) : 'N/A';
+      const velocity = useRealData ? metrics.velocity.toFixed(2) : 'N/A';
 
       marker.bindPopup(`
         <div class="font-sans min-w-[180px]">
           <h3 class="font-bold text-slate-100 text-sm mb-1">${station.name}</h3>
           <p class="text-xs text-slate-400 mb-2">ID: ${station.id}</p>
-          <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-300">
-            <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${temp}°C</span>
-            <span>Salinity:</span> <span>${salinity} PSU</span>
-            <span>Chl-a:</span> <span class="text-teal-400">${chl} mg/m³</span>
-            <span>Status:</span> <span class="${station.status === 'active' ? 'text-green-400' : 'text-yellow-400'}">${station.status}</span>
-          </div>
+          ${useRealData ? `
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-300">
+              <span>Temp:</span> <span class="${isCritical ? 'text-red-400 font-bold' : 'text-ocean-400'}">${temp}°C</span>
+              <span>Salinity:</span> <span class="text-emerald-400">${salinity} PSU</span>
+              <span>Chl-a:</span> <span class="text-teal-400">${chl} mg/m³</span>
+              <span>Velocity:</span> <span class="text-blue-400">${velocity} m/s</span>
+              <span>Status:</span> <span class="${station.status === 'active' ? 'text-green-400' : 'text-yellow-400'}">${station.status}</span>
+            </div>
+          ` : `
+            <div class="text-xs text-slate-400 py-2">
+              <p>Click on a station in the sidebar to view real-time data from Copernicus API</p>
+            </div>
+          `}
         </div>
       `);
 
@@ -214,13 +341,88 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
   return (
     <div className="relative w-full h-[250px] md:h-[400px] bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-xl group z-0">
       <div ref={mapContainer} className="w-full h-full" />
-      <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur px-4 py-2 rounded border border-slate-700 pointer-events-none z-[400]">
-        <h3 className="text-sm font-semibold text-ocean-100">South Atlantic Monitor</h3>
+
+      {/* Header - GIS Info Panel */}
+      <div className="absolute top-4 left-4 bg-slate-900/95 backdrop-blur-md px-4 py-2.5 rounded-lg border border-ocean-500/30 shadow-lg pointer-events-none z-[400]">
+        <h3 className="text-xs font-bold text-ocean-100 uppercase tracking-wide mb-1">Atlantic Ocean Monitor</h3>
         <div className="flex items-center gap-2 text-xs text-ocean-400">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          Live Feed • Leaflet API
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50"></span>
+          <span className="font-medium">Real-Time NOAA/NASA Data</span>
+        </div>
+        <div className="text-[10px] text-slate-500 mt-1 flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span>🌊 Bathymetry (GEBCO)</span>
+          </div>
+          {showSSTOverlay && (
+            <div className="flex items-center gap-2 text-orange-400 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+              <span>🌡️ SST Thermal Gradient</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* SST Overlay Control */}
+      <div className="absolute top-4 right-4 bg-slate-900/95 backdrop-blur-md rounded-lg border border-ocean-500/30 shadow-lg z-[400] overflow-hidden pointer-events-auto">
+        <button
+          onClick={() => setShowSSTOverlay(!showSSTOverlay)}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-all ${
+            showSSTOverlay
+              ? 'bg-ocean-500/20 text-ocean-300'
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${showSSTOverlay ? 'bg-ocean-400' : 'bg-slate-600'}`}></span>
+          <span>🌡️ SST Temperature Layer</span>
+        </button>
+      </div>
+
+      {/* Legend */}
+      <div className="absolute bottom-4 right-4 bg-slate-900/95 backdrop-blur-md px-3 py-2 rounded-lg border border-ocean-500/30 shadow-lg z-[400]">
+        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Station Status</h4>
+        <div className="space-y-1.5 mb-3">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <div className="w-3 h-3 rounded-full bg-ocean-400 border border-slate-900"></div>
+            <span>Active</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <div className="w-3 h-3 rounded-full bg-white border-2 border-ocean-500"></div>
+            <span>Selected</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <div className="w-3 h-3 rounded-full bg-red-500 border border-slate-900 animate-pulse"></div>
+            <span>Critical</span>
+          </div>
+        </div>
+
+        {showSSTOverlay && (
+          <>
+            <div className="border-t border-slate-700/50 my-2 pt-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sea Surface Temp</h4>
+              <div className="flex items-center gap-1 mb-1">
+                <div className="w-full h-4 rounded shadow-md" style={{
+                  background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff8800, #ff0000)'
+                }}></div>
+              </div>
+              <div className="flex justify-between text-[9px] text-slate-400">
+                <span>0°C</span>
+                <span>16°C</span>
+                <span>32°C</span>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Coordinates Display */}
+      {selectedStation && (
+        <div className="absolute bottom-4 left-4 bg-slate-900/95 backdrop-blur-md px-3 py-2 rounded-lg border border-ocean-500/30 shadow-lg z-[400] font-mono">
+          <div className="text-[10px] text-slate-500 mb-0.5">COORDINATES</div>
+          <div className="text-xs text-ocean-400 font-semibold">
+            {selectedStation.latitude.toFixed(4)}°, {selectedStation.longitude.toFixed(4)}°
+          </div>
+        </div>
+      )}
     </div>
   );
 };
