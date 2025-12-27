@@ -107,7 +107,7 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
-  const [activeLayer, setActiveLayer] = React.useState<'satellite' | 'bathymetry' | 'dark'>('bathymetry');
+  const [showSSTOverlay, setShowSSTOverlay] = React.useState(true);
 
   // Initialize Map
   useEffect(() => {
@@ -124,27 +124,35 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     mapInstance.current = map;
     markersRef.current = L.layerGroup().addTo(map);
 
-    // Camadas de Base - Estilo GIS Oceanográfico
-    const bathymetryLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles &copy; Esri &mdash; GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, and Esri',
+    // Camada Base - Batimetria Oceanográfica
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Esri, GEBCO, NOAA',
       maxZoom: 13
     }).addTo(map);
 
-    // Adiciona overlay de batimetria/relevo oceânico
-    const bathymetryReference = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
+    // Overlay de batimetria/relevo
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
+      opacity: 0.5,
+      maxZoom: 13
+    }).addTo(map);
+
+    // OVERLAY DE TEMPERATURA SST REAL DO NOAA (WMS)
+    // Dados reais de temperatura superficial do mar
+    const sstLayer = L.tileLayer.wms('https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request', {
+      layers: 'jplMURSST41:analysed_sst',
+      format: 'image/png',
+      transparent: true,
       opacity: 0.6,
-      maxZoom: 13
-    }).addTo(map);
+      attribution: 'NOAA CoastWatch',
+      version: '1.3.0',
+      crs: L.CRS.EPSG4326
+    } as any).addTo(map);
 
-    // Armazena camadas para controle posterior
-    (map as any)._baseLayers = {
-      bathymetry: bathymetryLayer,
-      bathymetryReference: bathymetryReference
-    };
+    // Armazena referência da camada SST
+    (map as any)._sstLayer = sstLayer;
 
+    // Controles do mapa
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    // Adiciona controle de escala (importante para GIS)
     L.control.scale({
       position: 'bottomleft',
       imperial: false,
@@ -157,51 +165,21 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
     };
   }, []);
 
-  // Handle Layer Changes
+  // Toggle SST Overlay
   useEffect(() => {
     if (!mapInstance.current) return;
 
     const map = mapInstance.current;
-    const layers = (map as any)._baseLayers;
-    if (!layers) return;
+    const sstLayer = (map as any)._sstLayer;
 
-    // Remove todas as camadas atuais
-    map.eachLayer((layer: any) => {
-      if (layer._url) {
-        map.removeLayer(layer);
+    if (sstLayer) {
+      if (showSSTOverlay) {
+        sstLayer.addTo(map);
+      } else {
+        map.removeLayer(sstLayer);
       }
-    });
-
-    // Adiciona a camada selecionada
-    if (activeLayer === 'bathymetry') {
-      const bathymetryLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 13
-      }).addTo(map);
-      const bathymetryReference = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}', {
-        opacity: 0.6,
-        maxZoom: 13
-      }).addTo(map);
-    } else if (activeLayer === 'satellite') {
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19
-      }).addTo(map);
-      // Overlay de nomes
-      L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        opacity: 0.5,
-        maxZoom: 19
-      }).addTo(map);
-    } else if (activeLayer === 'dark') {
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 19
-      }).addTo(map);
     }
-
-    // Re-adiciona os marcadores
-    if (markersRef.current) {
-      markersRef.current.addTo(map);
-    }
-  }, [activeLayer]);
+  }, [showSSTOverlay]);
 
   // Handle Station Change (FlyTo) and Markers
   useEffect(() => {
@@ -299,55 +277,31 @@ export const OceanMap: React.FC<OceanMapProps> = ({ selectedStation, stations = 
 
       {/* Header - GIS Info Panel */}
       <div className="absolute top-4 left-4 bg-slate-900/95 backdrop-blur-md px-4 py-2.5 rounded-lg border border-ocean-500/30 shadow-lg pointer-events-none z-[400]">
-        <h3 className="text-xs font-bold text-ocean-100 uppercase tracking-wide mb-1">South Atlantic GIS Monitor</h3>
+        <h3 className="text-xs font-bold text-ocean-100 uppercase tracking-wide mb-1">Atlantic Ocean Monitor</h3>
         <div className="flex items-center gap-2 text-xs text-ocean-400">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50"></span>
-          <span className="font-medium">Real-Time Oceanographic Data</span>
+          <span className="font-medium">Real-Time NOAA/Copernicus Data</span>
         </div>
         <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-2">
-          <span>🌊 Bathymetry Layer</span>
+          <span>🌊 Bathymetry + SST Overlay</span>
           <span>•</span>
           <span>GEBCO/NOAA</span>
         </div>
       </div>
 
-      {/* Layer Control Panel */}
-      <div className="absolute top-4 right-4 bg-slate-900/95 backdrop-blur-md rounded-lg border border-ocean-500/30 shadow-lg z-[400] overflow-hidden">
-        <div className="px-3 py-2 border-b border-slate-700/50">
-          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Map Layers</h4>
-        </div>
-        <div className="p-2 space-y-1">
-          <button
-            onClick={() => setActiveLayer('bathymetry')}
-            className={`w-full px-3 py-1.5 text-xs rounded transition-all ${
-              activeLayer === 'bathymetry'
-                ? 'bg-ocean-500/20 text-ocean-300 border border-ocean-500/50'
-                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
-            }`}
-          >
-            🌊 Bathymetry
-          </button>
-          <button
-            onClick={() => setActiveLayer('satellite')}
-            className={`w-full px-3 py-1.5 text-xs rounded transition-all ${
-              activeLayer === 'satellite'
-                ? 'bg-ocean-500/20 text-ocean-300 border border-ocean-500/50'
-                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
-            }`}
-          >
-            🛰️ Satellite
-          </button>
-          <button
-            onClick={() => setActiveLayer('dark')}
-            className={`w-full px-3 py-1.5 text-xs rounded transition-all ${
-              activeLayer === 'dark'
-                ? 'bg-ocean-500/20 text-ocean-300 border border-ocean-500/50'
-                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
-            }`}
-          >
-            🗺️ Dark Mode
-          </button>
-        </div>
+      {/* SST Overlay Control */}
+      <div className="absolute top-4 right-4 bg-slate-900/95 backdrop-blur-md rounded-lg border border-ocean-500/30 shadow-lg z-[400] overflow-hidden pointer-events-auto">
+        <button
+          onClick={() => setShowSSTOverlay(!showSSTOverlay)}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium transition-all ${
+            showSSTOverlay
+              ? 'bg-ocean-500/20 text-ocean-300'
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${showSSTOverlay ? 'bg-ocean-400' : 'bg-slate-600'}`}></span>
+          <span>🌡️ SST Temperature Layer</span>
+        </button>
       </div>
 
       {/* Legend */}
