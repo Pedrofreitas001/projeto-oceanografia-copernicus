@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { KPICard } from '../components/Layout';
 import { OceanMap, TemperatureChart, SalinityChart } from '../components/Visualizations';
+import { NASAWorldviewStyleMap } from '../components/NASAWorldviewStyleMap';
+import { NASAWorldWindMap } from '../components/NASAWorldWindMap';
 import { OceanService } from '../services/api';
 import { OceanDataPoint, Station } from '../types';
 
@@ -28,6 +30,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
   const [anomalyCount, setAnomalyCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [historicalData, setHistoricalData] = useState<any[]>([]);
+  const [mapMode, setMapMode] = useState<'standard' | 'nasa_timeline' | 'nasa_3d'>('nasa_timeline');
 
   // Detect API mode from environment
   const apiMode = (import.meta as any).env?.VITE_API_MODE || 'demo';
@@ -279,7 +282,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map Section - Takes up 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
+          {/* Map Mode Selector */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs text-slate-400 font-medium">Map Mode:</span>
+            <button
+              onClick={() => setMapMode('standard')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                mapMode === 'standard'
+                  ? 'bg-ocean-500 text-white shadow-lg'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              🗺️ Standard
+            </button>
+            <button
+              onClick={() => setMapMode('nasa_timeline')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                mapMode === 'nasa_timeline'
+                  ? 'bg-ocean-500 text-white shadow-lg'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              🎬 NASA Timeline
+            </button>
+            <button
+              onClick={() => setMapMode('nasa_3d')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                mapMode === 'nasa_3d'
+                  ? 'bg-ocean-500 text-white shadow-lg'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              🌍 NASA 3D Globe
+            </button>
+          </div>
+
+          {/* Map Component - Conditional Rendering */}
+          {mapMode === 'standard' && (
+            <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
+          )}
+
+          {mapMode === 'nasa_timeline' && (
+            <NASAWorldviewStyleMap selectedStation={selectedStation} stations={stations} />
+          )}
+
+          {mapMode === 'nasa_3d' && (
+            <NASAWorldWindMap selectedStation={selectedStation} stations={stations} />
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
