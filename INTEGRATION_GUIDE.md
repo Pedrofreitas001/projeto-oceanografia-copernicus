@@ -1,54 +1,91 @@
-# 🔧 Guia de Integração - NASA Worldview Style Map
+# 🔧 Guia de Integração - NASA Maps
+
+## ✅ Status: INTEGRADO NO DASHBOARD!
+
+Os mapas da NASA já estão **funcionando no Dashboard**! Use os botões de seleção para alternar entre os modos.
 
 ## Opções de Mapas SST Disponíveis
 
-Você agora tem **3 componentes de mapa SST** diferentes para escolher:
+Você agora tem **4 componentes de mapa SST** diferentes:
 
-| Componente | Melhor Para | Características Principais |
-|------------|-------------|---------------------------|
-| **OceanMap** | Dashboard padrão | SST overlay simples, marcadores de estações |
-| **MultiSourceSSTMap** | Confiabilidade | 4 fontes com fallback automático |
-| **NASAWorldviewStyleMap** | Análise temporal | Timeline animada, estilo NASA Worldview ⭐ |
+| Componente | Melhor Para | Características Principais | Status |
+|------------|-------------|---------------------------|--------|
+| **OceanMap** | Dashboard padrão | SST overlay simples, marcadores | ✅ Ativo |
+| **NASAWorldviewStyleMap** | Análise temporal | 5 GIBS layers + timeline ⭐ | ✅ **INTEGRADO** |
+| **NASAWorldWindMap** | Visualização 3D | Globo 3D interativo | ✅ **INTEGRADO** |
+| **MultiSourceSSTMap** | Confiabilidade | 4 fontes com fallback | ⚠️ Standalone |
 
 ---
 
-## ⭐ Integrando o NASA Worldview Style Map
+## 🎮 Usando o Seletor de Mapas (Dashboard)
 
-### Opção 1: Substituir o OceanMap no Dashboard
+No Dashboard, você encontrará **3 botões** acima do mapa:
 
-**Arquivo**: `pages/Dashboard.tsx`
+```
+Map Mode: [🗺️ Standard] [🎬 NASA Timeline] [🌍 NASA 3D Globe]
+```
+
+### 🗺️ Standard Mode
+- **Componente**: `OceanMap`
+- **SST Source**: NOAA CoastWatch WMS
+- **Features**: Overlay simples, marcadores de estações
+- **Melhor para**: Visualização rápida
+
+### 🎬 NASA Timeline Mode (Padrão)
+- **Componente**: `NASAWorldviewStyleMap`
+- **SST Sources**: 5 camadas GIBS (GHRSST MUR, MODIS Day/Night/Thermal, NOAA WMS)
+- **Features**: Timeline animada, playback, seleção de datas
+- **Melhor para**: Análise temporal, animações
+
+### 🌍 NASA 3D Globe Mode
+- **Componente**: `NASAWorldWindMap`
+- **SST Sources**: 4 camadas GIBS (GHRSST MUR, MODIS Day/Night, NOAA WMS)
+- **Features**: Globo 3D WebGL, rotação, zoom
+- **Melhor para**: Apresentações, visualização imersiva
+
+---
+
+## 📝 Como Foi Integrado (Já Implementado)
+
+A integração foi feita com um **sistema de seleção de modo** que permite alternar entre os 3 mapas sem recarregar a página.
+
+### Código de Integração (pages/Dashboard.tsx)
 
 ```typescript
-// ANTES
-import { OceanMap, TemperatureChart, SalinityChart } from '../components/Visualizations';
-
-// DEPOIS
-import { TemperatureChart, SalinityChart } from '../components/Visualizations';
+// 1. Imports adicionados
 import { NASAWorldviewStyleMap } from '../components/NASAWorldviewStyleMap';
-```
+import { NASAWorldWindMap } from '../components/NASAWorldWindMap';
 
-**No JSX do Dashboard** (procure por `<OceanMap .../>` e substitua):
+// 2. Estado para controlar modo do mapa
+const [mapMode, setMapMode] = useState<'standard' | 'nasa_timeline' | 'nasa_3d'>('nasa_timeline');
 
-```tsx
-{/* ANTES */}
-<OceanMap
-  selectedStation={selectedStation}
-  stations={stations}
-  metrics={metrics}
-/>
+// 3. Botões de seleção
+<div className="flex items-center gap-2 mb-4">
+  <span className="text-xs text-slate-400 font-medium">Map Mode:</span>
+  <button onClick={() => setMapMode('standard')}>🗺️ Standard</button>
+  <button onClick={() => setMapMode('nasa_timeline')}>🎬 NASA Timeline</button>
+  <button onClick={() => setMapMode('nasa_3d')}>🌍 NASA 3D Globe</button>
+</div>
 
-{/* DEPOIS */}
-<NASAWorldviewStyleMap
-  selectedStation={selectedStation}
-  stations={stations}
-/>
+// 4. Renderização condicional
+{mapMode === 'standard' && (
+  <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
+)}
+
+{mapMode === 'nasa_timeline' && (
+  <NASAWorldviewStyleMap selectedStation={selectedStation} stations={stations} />
+)}
+
+{mapMode === 'nasa_3d' && (
+  <NASAWorldWindMap selectedStation={selectedStation} stations={stations} />
+)}
 ```
 
 ---
 
-### Opção 2: Adicionar como Aba Adicional
+## 🔧 Outras Opções de Integração
 
-**Criar um sistema de abas** no Dashboard para alternar entre visualizações:
+### Opção Alternativa: Criar um sistema de abas
 
 ```typescript
 // No Dashboard.tsx, adicione state:
