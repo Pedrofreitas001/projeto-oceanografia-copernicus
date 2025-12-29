@@ -23,51 +23,70 @@ interface SSTLayer {
   buildUrl: (date: string) => string;
 }
 
-// NASA GIBS MODIS SST Layers
+// NASA GIBS SST Layers - Official layer identifiers from NASA GIBS Documentation
+// Reference: https://nasa-gibs.github.io/gibs-api-docs/access-basics/
+// Catalog: https://worldview.earthdata.nasa.gov/
 const SST_LAYERS: SSTLayer[] = [
   {
+    id: 'ghrsst_mur_gibs',
+    name: 'GHRSST MUR SST (GIBS)',
+    description: 'Multi-scale Ultra-high Resolution SST from NASA GIBS - 1km resolution',
+    type: 'wmts',
+    url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
+    format: 'image/png',
+    resolution: '1km',
+    updateFrequency: 'Daily',
+    buildUrl: (date: string) => {
+      // Official GIBS WMTS REST pattern
+      return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Surface_Temperature/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`;
+    }
+  },
+  {
     id: 'modis_sst_day',
-    name: 'MODIS Aqua SST (Day)',
-    description: 'Daytime sea surface temperature from MODIS Aqua satellite',
+    name: 'MODIS Aqua SST MidIR (Day)',
+    description: 'Mid-infrared daytime SST from MODIS Aqua - 4km resolution',
     type: 'wmts',
     url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     format: 'image/png',
     resolution: '4km',
     updateFrequency: 'Daily',
     buildUrl: (date: string) => {
+      // Layer ID: MODIS_Aqua_L3_SST_MidIR_4km_Day_Daily
       return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_L3_SST_MidIR_4km_Day_Daily/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
     }
   },
   {
     id: 'modis_sst_night',
-    name: 'MODIS Aqua SST (Night)',
-    description: 'Nighttime sea surface temperature from MODIS Aqua satellite',
+    name: 'MODIS Aqua SST MidIR (Night)',
+    description: 'Mid-infrared nighttime SST from MODIS Aqua - 4km resolution',
     type: 'wmts',
     url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     format: 'image/png',
     resolution: '4km',
     updateFrequency: 'Daily',
     buildUrl: (date: string) => {
+      // Layer ID: MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily
       return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_L3_SST_MidIR_4km_Night_Daily/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
     }
   },
   {
     id: 'modis_sst_thermal_day',
     name: 'MODIS Aqua SST Thermal (Day)',
-    description: 'Thermal infrared SST from MODIS Aqua - daytime',
+    description: 'Thermal infrared SST from MODIS Aqua - daytime 4km',
     type: 'wmts',
     url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best',
     format: 'image/png',
     resolution: '4km',
     updateFrequency: 'Daily',
     buildUrl: (date: string) => {
+      // Layer ID: MODIS_Aqua_L3_SST_Thermal_4km_Day_Daily
       return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_L3_SST_Thermal_4km_Day_Daily/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
     }
   },
   {
     id: 'noaa_jpl_mur',
-    name: 'JPL MUR SST (1km)',
-    description: 'Ultra-high resolution multi-scale SST analysis',
+    name: 'JPL MUR SST WMS (Fallback)',
+    description: 'NOAA CoastWatch WMS - Ultra-high resolution 1km (fallback)',
     type: 'wms',
     url: 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request',
     layers: 'jplMURSST41:analysed_sst',
