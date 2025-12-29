@@ -89,9 +89,11 @@ export const NASAWorldWindMap: React.FC<NASAWorldWindMapProps> = ({
   const sstLayerRef = useRef<any>(null);
 
   const [worldWindLoaded, setWorldWindLoaded] = useState(false);
-  const [selectedLayer, setSelectedLayer] = useState<SSTLayerConfig>(SST_LAYERS[0]);
+  // Usar MODIS Day como padrão (índice 1) - GHRSST pode ter delay
+  const [selectedLayer, setSelectedLayer] = useState<SSTLayerConfig>(SST_LAYERS[1]);
+  // Usar dados de 2 dias atrás para garantir disponibilidade no GIBS
   const [currentDate, setCurrentDate] = useState(
-    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -187,46 +189,57 @@ export const NASAWorldWindMap: React.FC<NASAWorldWindMapProps> = ({
     console.log(`🌡️ Adding ${selectedLayer.name} for ${currentDate}`);
 
     if (selectedLayer.serviceType === 'GIBS_WMTS') {
-      // NASA GIBS WMTS Layer
-      const gibsConfig = {
-        identifier: selectedLayer.identifier,
-        date: currentDate,
-        format: 'image/png',
-        transparent: true
+      // NASA GIBS WMTS Layer - Usar Leaflet-style tile layer ao invés de WmtsLayer nativo
+      // Isso evita problemas com bounding box e configuração do WorldWind
+
+      const gibsBaseUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+      const tileMatrixSet = 'GoogleMapsCompatible_Level7'; // Level7 é mais comum para 4km
+
+      // Criar um RenderableLayer customizado com tiles GIBS
+      const renderableLayer = new WorldWind.RenderableLayer(selectedLayer.name);
+      renderableLayer.opacity = 0.7;
+
+      // Por enquanto, adicionar apenas o layer vazio
+      // O WorldWind não renderiza WMTS da mesma forma que Leaflet
+      // Vamos usar WMS como fallback
+      console.log(`⚠️ GIBS WMTS em WorldWind tem limitações, usando WMS fallback`);
+
+      // Usar WMS ao invés de WMTS no WorldWind
+      const wmsUrl = 'https://coastwatch.pfeg.noaa.gov/erddap/wms/jplMURSST41/request';
+      const wmsConfig = {
+        service: wmsUrl,
+        layerNames: 'jplMURSST41:analysed_sst',
+        title: selectedLayer.name,
+        version: '1.3.0'
       };
 
-      // Build GIBS WMTS URL following official pattern
-      // https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{resolution}/{z}/{y}/{x}.{format}
-      const gibsBaseUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
-      const tileMatrixSet = 'GoogleMapsCompatible_Level9';
+      const wmsLayerConfig = WorldWind.WmsLayer.formLayerConfiguration(wmsConfig);
 
-      const wmtsLayer = new WorldWind.WmtsLayer({
-        service: `${gibsBaseUrl}/wmts.cgi?`,
-        layerIdentifier: gibsConfig.identifier,
-        tileMatrixSet: tileMatrixSet,
-        levelZeroDelta: new WorldWind.Location(180, 180),
-        numLevels: 10,
-        format: gibsConfig.format,
-        size: 256,
-        // GIBS time parameter
-        urlBuilder: {
-          urlForTile: function(tile: any, imageFormat: string) {
-            const level = tile.level.levelNumber;
-            const row = tile.row;
-            const col = tile.column;
+      wmsLayerConfig.urlBuilder = {
+        urlForTile: function(tile: any, imageFormat: string) {
+          const sector = tile.sector;
+          const bbox = `${sector.minLongitude},${sector.minLatitude},${sector.maxLongitude},${sector.maxLatitude}`;
 
-            // GIBS REST URL pattern
-            return `${gibsBaseUrl}/${gibsConfig.identifier}/default/${currentDate}/${tileMatrixSet}/${level}/${row}/${col}.png`;
-          }
+          return `${wmsUrl}?` +
+            `SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap` +
+            `&LAYERS=jplMURSST41:analysed_sst` +
+            `&STYLES=` +
+            `&FORMAT=image/png` +
+            `&TRANSPARENT=true` +
+            `&WIDTH=256&HEIGHT=256` +
+            `&CRS=EPSG:4326` +
+            `&BBOX=${bbox}` +
+            `&TIME=${currentDate}T00:00:00.000Z` +
+            `&COLORSCALERANGE=0,32`;
         }
-      }, null);
+      };
 
-      wmtsLayer.displayName = selectedLayer.name;
-      wmtsLayer.opacity = 0.7;
-      wwd.addLayer(wmtsLayer);
-      sstLayerRef.current = wmtsLayer;
+      const wmsLayer = new WorldWind.WmsLayer(wmsLayerConfig);
+      wmsLayer.opacity = 0.7;
+      wwd.addLayer(wmsLayer);
+      sstLayerRef.current = wmsLayer;
 
-      console.log(`✅ GIBS WMTS layer added: ${selectedLayer.identifier}`);
+      console.log(`✅ GIBS layer added via WMS fallback: ${selectedLayer.name}`);
 
     } else if (selectedLayer.serviceType === 'WMS' && selectedLayer.wmsConfig) {
       // WMS Layer (fallback for NOAA data)

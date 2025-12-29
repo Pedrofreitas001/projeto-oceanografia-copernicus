@@ -108,15 +108,17 @@ export const NASAWorldviewStyleMap: React.FC<NASAWorldviewStyleMapProps> = ({
   const sstLayerRef = useRef<L.TileLayer | L.TileLayer.WMS | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
-  const [selectedLayer, setSelectedLayer] = useState<SSTLayer>(SST_LAYERS[0]);
+  // Usar MODIS Day como padrão (índice 1) ao invés de GHRSST (que pode ter delay de dados)
+  const [selectedLayer, setSelectedLayer] = useState<SSTLayer>(SST_LAYERS[1]);
+  // Usar dados de 2 dias atrás para garantir disponibilidade
   const [currentDate, setCurrentDate] = useState(
-    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(500); // ms per frame
   const [dateRange, setDateRange] = useState({
-    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    start: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    end: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   });
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [showTimelinePanel, setShowTimelinePanel] = useState(true);
@@ -480,10 +482,10 @@ export const NASAWorldviewStyleMap: React.FC<NASAWorldviewStyleMapProps> = ({
             <button
               onClick={() => {
                 const today = new Date();
-                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const weekAgo = new Date(today.getTime() - 9 * 24 * 60 * 60 * 1000);
                 setDateRange({
                   start: weekAgo.toISOString().split('T')[0],
-                  end: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  end: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                 });
               }}
               className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-300 transition-colors"
@@ -493,10 +495,10 @@ export const NASAWorldviewStyleMap: React.FC<NASAWorldviewStyleMapProps> = ({
             <button
               onClick={() => {
                 const today = new Date();
-                const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                const monthAgo = new Date(today.getTime() - 32 * 24 * 60 * 60 * 1000);
                 setDateRange({
                   start: monthAgo.toISOString().split('T')[0],
-                  end: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  end: new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                 });
               }}
               className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-300 transition-colors"
