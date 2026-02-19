@@ -1,65 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
-import { AnomaliesPage } from './pages/Anomalies';
-import { ViewState, FilterRegion, Station } from './types';
+import { FilterRegion, Station } from './types';
 import { Menu } from 'lucide-react';
-import { OceanService } from './services/api';
+import { NDBCService } from './services/ndbc';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
-  // State for Filters/Selection
+
+  // Filtros e seleção
   const [selectedRegion, setSelectedRegion] = useState<FilterRegion>('all');
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load Stations when region changes
-  useEffect(() => {
-    const fetchStations = async () => {
-      const data = await OceanService.getStations(selectedRegion);
+  // Buscar estações do Supabase quando região muda
+  const fetchStations = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = selectedRegion === 'all'
+        ? await NDBCService.getStationsWithLatest()
+        : await NDBCService.getStationsByRegion(selectedRegion);
+
       setStations(data);
-      
-      // Select first station by default if none selected or if filtering invalidated current selection
+
+      // Selecionar primeira estação se nenhuma selecionada
       if (data.length > 0) {
-        // If current selection is not in the new list, select the first one
-        if (!selectedStationId || !data.find(s => s.id === selectedStationId)) {
-            setSelectedStationId(data[0].id);
+        if (!selectedStationId || !data.find(s => s.station_id === selectedStationId)) {
+          setSelectedStationId(data[0].station_id);
         }
       } else {
         setSelectedStationId(null);
       }
-    };
-    fetchStations();
+    } catch (err) {
+      console.error('Erro ao buscar estações:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [selectedRegion]);
 
-  const handleStationChange = (id: string) => {
-    setSelectedStationId(id);
-  };
+  useEffect(() => {
+    fetchStations();
+  }, [fetchStations]);
 
-  const currentStation = stations.find(s => s.id === selectedStationId) || null;
+  // Auto-refresh a cada 5 minutos
+  useEffect(() => {
+    const interval = setInterval(fetchStations, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchStations]);
+
+  const currentStation = stations.find(s => s.station_id === selectedStationId) || null;
 
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
-      <Sidebar 
-        currentView={currentView} 
-        onNavigate={setCurrentView} 
+      <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        // Props for filtering
         selectedRegion={selectedRegion}
         onRegionChange={setSelectedRegion}
         stations={stations}
         selectedStationId={selectedStationId}
-        onStationChange={handleStationChange}
+        onStationChange={setSelectedStationId}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-slate-950 relative">
         {/* Mobile Toggle */}
         <div className="md:hidden p-4 border-b border-slate-800 bg-slate-900 flex items-center justify-between">
            <div className="font-display font-bold text-lg text-white">OceanData</div>
-           <button 
+           <button
              onClick={() => setIsSidebarOpen(true)}
              className="text-slate-400 hover:text-white"
            >
@@ -67,13 +75,12 @@ const App: React.FC = () => {
            </button>
         </div>
 
-        {/* View Content */}
         <main className="flex-1 overflow-hidden relative">
-           {currentView === 'dashboard' ? (
-             <Dashboard selectedStation={currentStation} stations={stations} />
-           ) : (
-             <AnomaliesPage selectedStation={currentStation} />
-           )}
+          <Dashboard
+            selectedStation={currentStation}
+            stations={stations}
+            loading={loading}
+          />
         </main>
       </div>
     </div>

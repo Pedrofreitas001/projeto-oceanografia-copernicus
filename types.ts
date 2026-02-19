@@ -5,34 +5,42 @@ export interface OceanDataPoint {
   longitude: number;
   temperature: number;
   salinity: number;
-  chlorophyll?: number; // mg/m³ - Dados do Copernicus Biogeochemistry
+  chlorophyll?: number;
   status: 'normal' | 'warning' | 'critical';
 }
 
+/** Estação NDBC com dados da última medição (vem do RPC get_stations_with_latest) */
 export interface Station {
-  id: string;
-  name: string;
-  region: FilterRegion;
+  station_id: string;
+  station_name: string;
   latitude: number;
   longitude: number;
-  status: 'active' | 'maintenance' | 'offline';
+  region: string;
+  station_type: string;
+  is_active: boolean;
+  // Última medição (join lateral)
+  observed_at?: string;
+  wave_height?: number | null;
+  wind_speed?: number | null;
+  wind_direction?: number | null;
+  water_temp?: number | null;
+  air_temp?: number | null;
+  pressure?: number | null;
 }
 
-export interface Anomaly {
-  id: string;
-  type: 'temperature' | 'salinity' | 'currents' | 'biogeochem';
-  severity: 'low' | 'medium' | 'critical';
-  value: number;
-  expected: number;
-  deviation: number;
-  location: {
-    lat: number;
-    lon: number;
-    name: string;
-  };
-  timestamp: string;
-  description: string;
+/** Medição de série temporal (vem do RPC get_station_timeseries) */
+export interface Measurement {
+  observed_at: string;
+  wave_height: number | null;
+  dominant_period: number | null;
+  wind_speed: number | null;
+  wind_direction: number | null;
+  wind_gust: number | null;
+  water_temp: number | null;
+  air_temp: number | null;
+  pressure: number | null;
+  dewpoint: number | null;
 }
 
-export type ViewState = 'dashboard' | 'anomalies';
-export type FilterRegion = 'all' | 'south_atlantic' | 'brazilian_coast' | 'pacific';
+export type ViewState = 'dashboard';
+export type FilterRegion = 'all' | 'atlantic' | 'pacific' | 'gulf' | 'great_lakes';

@@ -1,168 +1,97 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Thermometer, 
-  Droplets, 
-  AlertOctagon, 
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  Thermometer,
+  Waves,
+  Wind,
+  Gauge,
   Clock,
-  ArrowRight,
   Loader2,
-  FlaskConical,
   MapPin,
-  Waves
 } from 'lucide-react';
 import { KPICard } from '../components/Layout';
-import { OceanMap, TemperatureChart, SalinityChart } from '../components/Visualizations';
-import { OceanService } from '../services/api';
-import { OceanDataPoint, Station } from '../types';
+import { OceanMap } from '../components/Visualizations';
+import { Station, Measurement } from '../types';
+import { NDBCService } from '../services/ndbc';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 
 interface DashboardProps {
   selectedStation: Station | null;
-  stations?: Station[];
+  stations: Station[];
+  loading?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations = [] }) => {
-  const [loading, setLoading] = useState(true);
-  const [recentData, setRecentData] = useState<OceanDataPoint[]>([]);
-  const [metrics, setMetrics] = useState({ temp: 0, salinity: 0, chlorophyll: 0, velocity: 0 });
-  const [trendData, setTrendData] = useState<any[]>([]);
-  const [anomalyCount, setAnomalyCount] = useState(0);
+export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations, loading: stationsLoading }) => {
+  const [timeseries, setTimeseries] = useState<Measurement[]>([]);
+  const [tsLoading, setTsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
 
-  // Detect API mode from environment
-  const apiMode = (import.meta as any).env?.VITE_API_MODE || 'demo';
-  const isProduction = apiMode === 'production';
-
-  // Load historical data from localStorage on mount
+  // Buscar série temporal quando estação selecionada muda
   useEffect(() => {
-    const stored = localStorage.getItem('oceanDataHistory');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setHistoricalData(parsed);
-      } catch (e) {
-        console.error('Failed to parse historical data');
-      }
+    if (!selectedStation) {
+      setTimeseries([]);
+      return;
     }
-  }, []);
 
-  // Recarregar dados sempre que a estação selecionada mudar
-  useEffect(() => {
-    const loadDashboardData = async () => {
+    const fetchTimeseries = async () => {
       try {
-        // Use station coordinates if selected, otherwise default to Santos Basin (-24, -45)
-        const lat = selectedStation ? selectedStation.latitude : -24.0;
-        const lon = selectedStation ? selectedStation.longitude : -45.0;
-        const stationId = selectedStation ? selectedStation.id : undefined;
-
-        // CACHE: Tentar carregar dados do cache primeiro
-        const cacheKey = `ocean_data_${stationId || 'overview'}`;
-        const cachedData = localStorage.getItem(cacheKey);
-
-        if (cachedData) {
-          try {
-            const cached = JSON.parse(cachedData);
-            const cacheAge = Date.now() - new Date(cached.timestamp).getTime();
-
-            // Se o cache tem menos de 5 minutos, usar dados do cache enquanto carrega novos
-            if (cacheAge < 5 * 60 * 1000) {
-              console.log(`📦 Loaded cached data for ${stationId || 'overview'} (${Math.round(cacheAge / 1000)}s old)`);
-
-              setMetrics(cached.metrics);
-              setTrendData(cached.trendData || []);
-              setRecentData(cached.recentData || []);
-              setAnomalyCount(cached.anomalyCount || 0);
-              setLastUpdated(new Date(cached.timestamp));
-              setLoading(false);
-
-              // Continua carregando dados frescos em background
-            }
-          } catch (e) {
-            console.error('Failed to parse cached data');
-          }
-        } else {
-          setLoading(true);
-        }
-
-        // Parallel fetching - AGORA FILTRANDO POR ESTAÇÃO
-        const [dashboardData, recentMeasurements, anomalies] = await Promise.all([
-          OceanService.getDashboardData(lat, lon),
-          OceanService.getRecentMeasurements(stationId),
-          OceanService.getAnomalies(stationId)
-        ]);
-
-        const now = new Date();
-
-        // Todos os dados vêm da MESMA fonte (Copernicus ou Open-Meteo)
-        const newMetrics = {
-          temp: dashboardData.currentTemp,
-          salinity: dashboardData.currentSalinity,
-          chlorophyll: dashboardData.currentChlorophyll,
-          velocity: dashboardData.currentVelocity // Agora vem da API, não calculado!
-        };
-
-        setMetrics(newMetrics);
-        setTrendData(dashboardData.trend);
-        setRecentData(recentMeasurements);
-        setAnomalyCount(anomalies.length);
-        setLastUpdated(now);
-
-        // CACHE: Salvar dados no localStorage (reutilizar cacheKey já declarado)
-        const cacheData = {
-          metrics: newMetrics,
-          trendData: dashboardData.trend,
-          recentData: recentMeasurements,
-          anomalyCount: anomalies.length,
-          timestamp: now.toISOString(),
-          stationId: stationId || 'overview'
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        console.log(`💾 Cached data for ${stationId || 'overview'}`);
-
-        // Save to historical data (keep last 24 entries = 24 hours if updated hourly)
-        const historyEntry = {
-          timestamp: now.toISOString(),
-          stationId: selectedStation?.id || 'overview',
-          stationName: selectedStation?.name || 'South Atlantic Overview',
-          ...newMetrics
-        };
-
-        setHistoricalData(prevHistory => {
-          const newHistory = [historyEntry, ...prevHistory].slice(0, 24);
-          localStorage.setItem('oceanDataHistory', JSON.stringify(newHistory));
-          console.log(`  - Historical entries: ${newHistory.length}`);
-          return newHistory;
-        });
-
-        console.log(`📊 Loaded data for station: ${selectedStation?.name || 'All Stations'}`);
-        console.log(`  - API Mode: ${isProduction ? 'Production (Copernicus)' : 'Demo (Open-Meteo)'}`);
-        console.log(`  - Temperature: ${newMetrics.temp}°C`);
-        console.log(`  - Salinity: ${newMetrics.salinity} PSU`);
-        console.log(`  - Chlorophyll: ${newMetrics.chlorophyll} mg/m³`);
-        console.log(`  - Current Velocity: ${newMetrics.velocity} m/s`);
-        console.log(`  - Measurements: ${recentMeasurements.length}`);
-        console.log(`  - Anomalies: ${anomalies.length}`);
+        setTsLoading(true);
+        const data = await NDBCService.getStationTimeseries(selectedStation.station_id, 48);
+        setTimeseries(data);
+        setLastUpdated(new Date());
       } catch (err) {
-        console.error("Failed to load dashboard", err);
+        console.error('Erro ao buscar série temporal:', err);
+        setTimeseries([]);
       } finally {
-        setLoading(false);
+        setTsLoading(false);
       }
     };
 
-    loadDashboardData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStation]);
+    fetchTimeseries();
+  }, [selectedStation?.station_id]);
 
-  if (loading) {
+  // Formatar dados da série temporal para os gráficos
+  const chartData = useMemo(() =>
+    timeseries.map(m => ({
+      time: new Date(m.observed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      waterTemp: m.water_temp,
+      airTemp: m.air_temp,
+      waveHeight: m.wave_height,
+      windSpeed: m.wind_speed,
+      pressure: m.pressure,
+    })),
+    [timeseries]
+  );
+
+  // Dados do Live Data Feed — últimas medições da série temporal
+  const recentMeasurements = useMemo(() =>
+    timeseries.slice(-10).reverse(),
+    [timeseries]
+  );
+
+  // Estado de loading
+  if (stationsLoading && stations.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4">
         <Loader2 className="animate-spin text-ocean-500" size={48} />
-        <p className="animate-pulse">
-            {selectedStation ? `Connecting to ${selectedStation.name}...` : 'Synchronizing with Ocean buoys...'}
-        </p>
+        <p className="animate-pulse">Connecting to NOAA NDBC buoy network...</p>
       </div>
     );
   }
+
+  // Valores da estação selecionada para os KPIs
+  const waterTemp = selectedStation?.water_temp;
+  const waveHeight = selectedStation?.wave_height;
+  const windSpeed = selectedStation?.wind_speed;
+  const pressure = selectedStation?.pressure;
 
   return (
     <div className="p-6 md:p-8 space-y-8 h-full overflow-y-auto pb-24">
@@ -171,32 +100,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl md:text-3xl font-display font-bold text-white">
-              {selectedStation ? selectedStation.name : 'South Atlantic Overview'}
+              {selectedStation
+                ? selectedStation.station_name || `Station ${selectedStation.station_id}`
+                : 'NOAA NDBC Buoy Network'}
             </h2>
             {selectedStation && (
               <span className="text-sm font-sans font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded border border-slate-700">
-                Station ID: {selectedStation.id}
+                ID: {selectedStation.station_id}
               </span>
             )}
-            <span className={`text-xs font-bold px-2 py-1 rounded border ${
-              isProduction
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-            }`}>
-              {isProduction ? 'COPERNICUS API' : 'DEMO MODE'}
+            <span className="text-xs font-bold px-2 py-1 rounded border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+              LIVE DATA
             </span>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-2">
-            <p className="text-slate-400 flex items-center gap-2">
-              <MapPin size={14} />
-              {selectedStation
-                ? `Lat: ${selectedStation.latitude.toFixed(4)}, Lon: ${selectedStation.longitude.toFixed(4)}`
-                : 'Real-time monitoring network status'}
-            </p>
+            {selectedStation && (
+              <p className="text-slate-400 flex items-center gap-2">
+                <MapPin size={14} />
+                Lat: {selectedStation.latitude.toFixed(3)}°, Lon: {selectedStation.longitude.toFixed(3)}°
+                &middot; {selectedStation.region}
+              </p>
+            )}
             <p className="text-slate-400 flex items-center gap-2">
               <Clock size={14} />
               <span className="text-xs">
-                Last updated: {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                Updated: {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                {selectedStation?.observed_at && (
+                  <> &middot; Obs: {new Date(selectedStation.observed_at).toLocaleString('pt-BR')}</>
+                )}
               </span>
             </p>
           </div>
@@ -210,144 +141,121 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — dados reais da estação selecionada */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
-          label={selectedStation ? `SST at ${selectedStation.id}` : "SST Temperature"}
-          value={`${metrics.temp}°C`}
-          change={metrics.temp > 25 ? "High" : "Normal"}
-          trend={metrics.temp > 24 ? "up" : "neutral"}
+          label="Water Temperature"
+          value={waterTemp != null ? `${waterTemp.toFixed(1)}°C` : 'N/A'}
+          change={waterTemp != null ? (waterTemp > 25 ? 'Warm' : waterTemp > 15 ? 'Moderate' : 'Cold') : 'No data'}
+          trend={waterTemp != null ? (waterTemp > 25 ? 'up' : waterTemp < 15 ? 'down' : 'neutral') : 'neutral'}
           color="text-ocean-400"
           icon={<Thermometer size={20} />}
         />
         <KPICard
-          label={selectedStation ? `Salinity at ${selectedStation.id}` : "Avg Salinity"}
-          value={`${metrics.salinity.toFixed(1)} PSU`}
-          change={Math.abs(metrics.salinity - 35.2) < 0.5 ? "Normal" : metrics.salinity > 35.2 ? "+High" : "Low"}
-          trend={Math.abs(metrics.salinity - 35.2) < 0.5 ? "neutral" : metrics.salinity > 35.2 ? "up" : "down"}
-          color="text-emerald-400"
-          icon={<Droplets size={20} />}
-        />
-        <KPICard
-          label={selectedStation ? `Chl-a at ${selectedStation.id}` : "Chlorophyll-a"}
-          value={`${metrics.chlorophyll.toFixed(2)}`}
-          change="mg/m³"
-          trend={metrics.chlorophyll > 0.5 ? "up" : "neutral"}
-          color="text-teal-400"
-          icon={<FlaskConical size={20} />}
-        />
-        <KPICard
-          label={selectedStation ? `Velocity at ${selectedStation.id}` : "Current Velocity"}
-          value={`${metrics.velocity.toFixed(2)} m/s`}
-          change={metrics.velocity > 0.5 ? "Strong" : metrics.velocity > 0.3 ? "Moderate" : "Calm"}
-          trend={metrics.velocity > 0.5 ? "up" : "neutral"}
+          label="Wave Height"
+          value={waveHeight != null ? `${waveHeight.toFixed(1)} m` : 'N/A'}
+          change={waveHeight != null ? (waveHeight > 3 ? 'High Seas' : waveHeight > 1.5 ? 'Moderate' : 'Calm') : 'No data'}
+          trend={waveHeight != null ? (waveHeight > 3 ? 'up' : 'neutral') : 'neutral'}
           color="text-blue-400"
           icon={<Waves size={20} />}
         />
-      </div>
-
-      {/* Timestamp indicator below KPIs */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 -mt-4 mb-2">
-        <div className="flex items-center gap-2">
-          <Clock size={12} className="text-slate-500" />
-          <span className="text-xs text-slate-500">
-            KPIs updated: {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            {selectedStation && ` • ${selectedStation.name}`}
-          </span>
-        </div>
-        {historicalData.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">
-              📊 {historicalData.length} historical {historicalData.length === 1 ? 'entry' : 'entries'} saved
-            </span>
-            <button
-              onClick={() => {
-                if (window.confirm('Clear all historical data?')) {
-                  setHistoricalData([]);
-                  localStorage.removeItem('oceanDataHistory');
-                }
-              }}
-              className="text-xs text-red-400 hover:text-red-300 underline"
-            >
-              Clear
-            </button>
-          </div>
-        )}
+        <KPICard
+          label="Wind Speed"
+          value={windSpeed != null ? `${windSpeed.toFixed(1)} m/s` : 'N/A'}
+          change={windSpeed != null ? (windSpeed > 10 ? 'Strong' : windSpeed > 5 ? 'Moderate' : 'Calm') : 'No data'}
+          trend={windSpeed != null ? (windSpeed > 10 ? 'up' : 'neutral') : 'neutral'}
+          color="text-emerald-400"
+          icon={<Wind size={20} />}
+        />
+        <KPICard
+          label="Pressure"
+          value={pressure != null ? `${pressure.toFixed(1)} hPa` : 'N/A'}
+          change={pressure != null ? (pressure < 1010 ? 'Low' : pressure > 1020 ? 'High' : 'Normal') : 'No data'}
+          trend={pressure != null ? (pressure < 1010 ? 'down' : 'neutral') : 'neutral'}
+          color="text-purple-400"
+          icon={<Gauge size={20} />}
+        />
       </div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Map Section - Takes up 2 columns */}
+        {/* Map + Charts — 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          <OceanMap selectedStation={selectedStation} stations={stations} metrics={metrics} />
-          
+          <OceanMap selectedStation={selectedStation} stations={stations} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Temperature Chart (48h) */}
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-white flex items-center gap-2">
                   <Thermometer size={18} className="text-ocean-400" />
-                  Temperature (24h Forecast)
+                  Temperature (48h)
                 </h3>
-                <span className="text-xs text-slate-500">Source: Open-Meteo</span>
+                {tsLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
               </div>
-              <TemperatureChart data={trendData} />
+              {chartData.length > 0 ? (
+                <div className="h-[250px] md:h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} width={40} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="waterTemp" stroke="#0ea5e9" name="Water °C" dot={false} strokeWidth={2} connectNulls />
+                      <Line type="monotone" dataKey="airTemp" stroke="#f59e0b" name="Air °C" dot={false} strokeWidth={1.5} strokeDasharray="4 2" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[250px] md:h-[300px] flex items-center justify-center text-slate-500 text-sm">
+                  {tsLoading ? 'Loading...' : 'Select a station to view temperature data'}
+                </div>
+              )}
             </div>
-            
+
+            {/* Wave & Wind Chart (48h) */}
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
-               <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Droplets size={18} className="text-emerald-400" />
-                  Salinity Profile
+                  <Waves size={18} className="text-blue-400" />
+                  Wave Height & Wind (48h)
                 </h3>
-                <span className="text-xs text-slate-500">Annual</span>
               </div>
-              <SalinityChart />
+              {chartData.length > 0 ? (
+                <div className="h-[250px] md:h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} width={40} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="waveHeight" stroke="#3b82f6" name="Wave (m)" dot={false} strokeWidth={2} connectNulls />
+                      <Line type="monotone" dataKey="windSpeed" stroke="#10b981" name="Wind (m/s)" dot={false} strokeWidth={1.5} strokeDasharray="4 2" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[250px] md:h-[300px] flex items-center justify-center text-slate-500 text-sm">
+                  {tsLoading ? 'Loading...' : 'Select a station to view wave & wind data'}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Sidebar Widgets */}
+        {/* Sidebar Widgets — 1 column */}
         <div className="space-y-6">
-          {/* Anomaly Quick List */}
-          <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="p-5 border-b border-slate-700 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-white">Recent Alerts</h3>
-                {anomalyCount > 0 && (
-                  <span className="bg-red-500/20 text-red-400 text-xs py-0.5 px-2 rounded-full border border-red-500/20">
-                    {anomalyCount}
-                  </span>
-                )}
-              </div>
-              <button className="text-xs text-ocean-400 hover:text-ocean-300 font-medium">View All</button>
-            </div>
-            <div className="divide-y divide-slate-700/50">
-              <div className="p-4 hover:bg-slate-700/30 transition-colors border-l-2 border-red-500">
-                <div className="flex justify-between items-start mb-1">
-                  <span className="text-sm font-medium text-red-400">Temp Spike</span>
-                  <span className="text-xs text-slate-500">14:30</span>
-                </div>
-                <p className="text-xs text-slate-400">Station 42 reports +4.5°C deviation.</p>
-              </div>
-               <div className="p-4 hover:bg-slate-700/30 transition-colors border-l-2 border-yellow-500">
-                <div className="flex justify-between items-start mb-1">
-                  <span className="text-sm font-medium text-yellow-400">Salinity Drop</span>
-                  <span className="text-xs text-slate-500">10:15</span>
-                </div>
-                <p className="text-xs text-slate-400">Potential sensor drift at Buoy 09.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Data Table */}
-           <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col h-[400px]">
+          {/* Live Data Feed */}
+          <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col h-[500px]">
             <div className="p-5 border-b border-slate-700 flex justify-between items-center">
               <h3 className="font-semibold text-white">Live Data Feed</h3>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400">
-                  {selectedStation ? `${recentData.length} records from ${selectedStation.id}` : `${recentData.length} recent records`}
+                  {selectedStation ? `${recentMeasurements.length} records` : 'No station'}
                 </span>
-                {recentData.length > 0 && (
+                {recentMeasurements.length > 0 && (
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 )}
               </div>
@@ -357,67 +265,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ selectedStation, stations 
                 <thead className="bg-slate-900/50 text-xs uppercase font-medium text-slate-500 sticky top-0">
                   <tr>
                     <th className="px-4 py-3">Time</th>
-                    <th className="px-4 py-3">Loc</th>
                     <th className="px-4 py-3">Temp</th>
-                    <th className="px-4 py-3">Bio</th>
+                    <th className="px-4 py-3">Wave</th>
+                    <th className="px-4 py-3">Wind</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {recentData.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-700/20">
-                      <td className="px-4 py-3 font-mono text-xs">{new Date(row.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                      <td className="px-4 py-3">{row.latitude.toFixed(1)}, {row.longitude.toFixed(1)}</td>
-                      <td className={`px-4 py-3 ${row.temperature > 28 ? 'text-red-400 font-bold' : ''}`}>{row.temperature}°</td>
-                      <td className="px-4 py-3 text-teal-400">{row.chlorophyll?.toFixed(2) || '-'}</td>
+                  {recentMeasurements.length > 0 ? (
+                    recentMeasurements.map((m, i) => (
+                      <tr key={i} className="hover:bg-slate-700/20">
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {new Date(m.observed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className={`px-4 py-3 ${m.water_temp != null && m.water_temp > 28 ? 'text-red-400 font-bold' : 'text-ocean-400'}`}>
+                          {m.water_temp != null ? `${m.water_temp.toFixed(1)}°` : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {m.wave_height != null ? `${m.wave_height.toFixed(1)}m` : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {m.wind_speed != null ? `${m.wind_speed.toFixed(1)}` : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500 text-xs">
+                        {tsLoading ? 'Loading measurements...' : 'Select a station to view live data'}
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Historical Data */}
-          {historicalData.length > 0 && (
-            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-              <div className="p-5 border-b border-slate-700 flex justify-between items-center">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Clock size={18} className="text-blue-400" />
-                  Update History
-                </h3>
-                <span className="text-xs text-slate-400">Last {historicalData.length}</span>
-              </div>
-              <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-700/50">
-                {historicalData.slice(0, 10).map((entry, idx) => (
-                  <div key={idx} className="p-3 hover:bg-slate-700/30 transition-colors">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-xs font-medium text-slate-300">{entry.stationName}</span>
-                      <span className="text-xs text-slate-500 font-mono">
-                        {new Date(entry.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Temp:</span>
-                        <span className="text-ocean-400 font-medium">{entry.temp}°C</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Sal:</span>
-                        <span className="text-emerald-400 font-medium">{entry.salinity.toFixed(1)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Chl:</span>
-                        <span className="text-teal-400 font-medium">{entry.chlorophyll.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Vel:</span>
-                        <span className="text-blue-400 font-medium">{entry.velocity.toFixed(2)} m/s</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Pressure Chart */}
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <Gauge size={18} className="text-purple-400" />
+                Pressure (48h)
+              </h3>
             </div>
-          )}
+            {chartData.length > 0 ? (
+              <div className="h-[200px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                    <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} width={50} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: 12 }} />
+                    <Line type="monotone" dataKey="pressure" stroke="#a855f7" name="hPa" dot={false} strokeWidth={2} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">
+                No data
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
